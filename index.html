@@ -235,13 +235,15 @@ const VIEW_LABELS = { V:'主视图', H:'俯视图', W:'左视图' };
 const S = {
   solid:'prism',                   // 立体图形
   a:4, h:5, r:2.2, yaw:0,          // 几何参数 / 绕竖轴旋转
-  az:42, el:24, zoom:1, autoRot:false, autoSpeed:0.35, ortho:true,
+  az:-30, el:30, zoom:1, autoRot:false, autoSpeed:0.35, ortho:true, // 默认：正视略向右下倾斜约30°（相机在形体左前上方，看到的都是三面的正面）
   rayF:true, rayT:true, rayS:true, // 三方向光线开关
   unfold:0,                        // 0 折叠 / 1 展开（平滑值在 A 中）
   xray:false                       // 透视（虚线显示被遮挡线段）
 };
 const A = Object.assign({}, S);
 const TWEEN_KEYS = ['a','h','r','yaw','az','el','zoom','unfold'];
+/* 打开页面时的默认视角：正视方向，向左方位、向下俯仰各约30°（主视为正面、绿面在下、粉面在右） */
+const DEFAULT_VIEW = { az:-30, el:30, zoom:1, target:new THREE.Vector3(0,4,0) };
 
 /* ============================================================
  *  1. 渲染器 / 场景 / 相机
@@ -277,7 +279,15 @@ function updateCamera(){
   );
   const asp = innerWidth/innerHeight;
   const sz = orthoSize / Math.max(0.35, A.zoom);
-  camOrtho.left = -sz*asp; camOrtho.right = sz*asp;
+  // 左侧悬浮面板会占据部分画布：用非对称视锥把观察目标（场景中心）
+  // 放到“面板右侧可见区域”的正中；面板收起时偏移为0（窄屏收敛，避免面板过半时过度偏移）
+  let pw = 0;
+  if(!document.body.classList.contains('panel-off')){
+    const pr = document.getElementById('panel-left').getBoundingClientRect().right;
+    pw = Math.max(0, Math.min(pr, innerWidth*0.45));
+  }
+  const kx = innerWidth > 0 ? pw * sz * asp / innerWidth : 0;
+  camOrtho.left = -sz*asp - kx; camOrtho.right = sz*asp - kx;
   camOrtho.top = sz; camOrtho.bottom = -sz;
   camOrtho.position.copy(p); camOrtho.up.set(0,1,0); camOrtho.lookAt(camState.target);
   camOrtho.updateProjectionMatrix();
@@ -302,13 +312,9 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.
 composer.addPass(bloom);
 
 /* ============================================================
- *  2. 背景（网格 / 粒子，常开）
+ *  2. 背景（星空粒子，常开）
  * ========================================================== */
 const bgGroup = new THREE.Group(); scene.add(bgGroup);
-const grid = new THREE.GridHelper(70, 70, 0x1a4a66, 0x0e2a3d);
-grid.position.y = DV.yH - 0.02;
-grid.material.transparent = true; grid.material.opacity = 0.5;
-bgGroup.add(grid);
 const pCount = 700, pPos = new Float32Array(pCount*3);
 for(let i=0;i<pCount;i++){
   pPos[i*3]   = (Math.random()-0.5)*70;
@@ -1137,7 +1143,7 @@ function panelDef(){
   // —— 调整视角：视图 / 展开透视 / 缩放 / 自动旋转（拖动画面亦可直接旋转）——
   const view = [
     { t:'buttons', buttons:[{id:'focusFront',label:'正视'},{id:'focusTop',label:'俯视'},{id:'focusSide',label:'侧视'}] },
-    { t:'buttons', buttons:[{id:'toggle-unfold',label:'展开'},{id:'toggle-xray',label:'透视'}] },
+    { t:'buttons', buttons:[{id:'toggle-unfold',label:'展开'},{id:'toggle-xray',label:'透视'},{id:'reset-view',label:'重置'}] },
     { t:'range', id:'zoom', label:'缩放', min:0.4, max:2.6, step:0.01, fmt:v=>v.toFixed(2)+'×' },
     { t:'toggle', id:'autoRot', label:'自动旋转' },
     { t:'range', id:'autoSpeed', label:'旋转速度', min:0, max:2, step:0.05, fmt:v=>v.toFixed(2) }
@@ -1211,11 +1217,17 @@ function setView(az, el, zoom, target){
   syncSliders(['zoom']);
   updateButtons();
 }
-const VIEW_BTN = { focusFront:[0,0], focusTop:[0,89.9], focusSide:[90,0] };
+const VIEW_BTN = { focusFront:[0,0], focusTop:[0,89.9], focusSide:[-90,0] };
 function buttonAction(id){
   if(id === 'focusFront') setView(0, 0, 1.0, new THREE.Vector3(0, DV.yH+DV.vH/2, DV.zV));
   else if(id === 'focusTop') setView(0, 89.9, 1.0, new THREE.Vector3(0, DV.yH, DV.zV+DV.hD/2));
-  else if(id === 'focusSide') setView(90, 0, 1.0, new THREE.Vector3(DV.xW, DV.yH+DV.vH/2, DV.zV+DV.wD/2));
+  else if(id === 'focusSide') setView(-90, 0, 1.0, new THREE.Vector3(DV.xW, DV.yH+DV.vH/2, DV.zV+DV.wD/2));
+  else if(id === 'reset-view'){
+    // 视角与方位回到打开页面时的默认状态（并停止自动旋转，避免视角立刻漂走）
+    S.autoRot = false;
+    const ar = document.getElementById('c-autoRot'); if(ar) ar.checked = false;
+    setView(DEFAULT_VIEW.az, DEFAULT_VIEW.el, DEFAULT_VIEW.zoom, DEFAULT_VIEW.target.clone());
+  }
   else if(id.startsWith('shape-')){
     S.solid = id.slice(6);
     buildPanel();
