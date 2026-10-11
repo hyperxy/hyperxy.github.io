@@ -225,7 +225,7 @@ const DV = {                       // 三个投影面的关键坐标（三个面
 /* 青蓝科技主题（固定） */
 const COL = {
   solid:0x2bb6cf, solidEm:0x1d4ed8,
-  ray:0x9de7ff, arrow:0xeaf9ff, fold:0x3b82f6,
+  ray:0x9de7ff, fold:0x3b82f6,
   edge:0xcdeffb, hi:0xffd166, hidden:0x9fdcff
 };
 /* 三个投影面：三种不同的低饱和度半透明配色 */
@@ -237,6 +237,7 @@ const S = {
   a:4, h:5, r:2.2, yaw:0,          // 几何参数 / 绕竖轴旋转
   az:-30, el:30, zoom:1, ortho:true, // 默认：正视略向右下倾斜约30°（相机在形体左前上方，看到的都是三面的正面）
   rayF:true, rayT:true, rayS:true, // 三方向光线开关
+  rayPSize:6, rayPSpeed:0.08,      // 流动粒子：大小（屏幕像素，0=隐藏）/ 速度（每秒走过光线的比例，0=静止）
   unfold:0,                        // 0 折叠 / 1 展开（平滑值在 A 中）
   xray:false                       // 透视（虚线显示被遮挡线段）
 };
@@ -902,16 +903,19 @@ const RAY_DIRS = {
   S: { world:new THREE.Vector3(1,0,0),   name:'侧方光' }
 };
 let rayBuilt = { F:null, T:null, S:null };
-const arrowGeo = new THREE.ConeGeometry(0.16, 0.55, 14);
 const rayTubeGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
-const RAY_TUBE_R = 0.06;
+const RAY_TUBE_R = 0.04;        // 光束半径（稍细）
+const RAY_TUBE_OP = 0.42;       // 光束不透明度（稍暗）
+const RAY_PPR = 3;              // 每条光线上的运动粒子数（粒子流替代静态箭头指示方向）
+const RAY_PARTICLE_OP = 0.85;
 /* 发光圆点纹理（光子） */
 function makeGlowTexture(){
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d');
   const grd = g.createRadialGradient(32,32,0,32,32,32);
   grd.addColorStop(0,'rgba(255,255,255,1)');
-  grd.addColorStop(0.35,'rgba(200,242,255,.95)');
+  grd.addColorStop(0.22,'rgba(214,246,255,.9)');
+  grd.addColorStop(0.55,'rgba(150,228,255,.35)');
   grd.addColorStop(1,'rgba(120,220,255,0)');
   g.fillStyle = grd; g.fillRect(0,0,64,64);
   return new THREE.CanvasTexture(c);
@@ -996,11 +1000,11 @@ function buildRays(){
     // 光束（细圆柱，保证任意平台都有可见粗细）
     const nRay = Math.max(1, photons.length);
     const tubes = new THREE.InstancedMesh(rayTubeGeo,
-      new THREE.MeshBasicMaterial({ color:COL.ray, transparent:true, opacity:0.62, blending:THREE.AdditiveBlending, depthWrite:false }),
+      new THREE.MeshBasicMaterial({ color:COL.ray, transparent:true, opacity:RAY_TUBE_OP, blending:THREE.AdditiveBlending, depthWrite:false }),
       nRay);
-    tubes.material.userData.baseOp = 0.62;
+    tubes.material.userData.baseOp = RAY_TUBE_OP;
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), mid = new THREE.Vector3();
-    const scTube = new THREE.Vector3(), scArrow = new THREE.Vector3(1.4,1.4,1.4);
+    const scTube = new THREE.Vector3();
     q.setFromUnitVectors(AXIS_Y, RAY_DIRS[k].world);
     photons.forEach((ph,i)=>{
       const len = ph.s.distanceTo(ph.e);
@@ -1011,28 +1015,21 @@ function buildRays(){
     tubes.instanceMatrix.needsUpdate = true;
     root.add(tubes);
 
-    // 方向箭头（每条光线一个，靠近光源一端，指向投影面）
-    const arrows = new THREE.InstancedMesh(arrowGeo,
-      new THREE.MeshBasicMaterial({ color:COL.arrow, transparent:true, opacity:0.95, blending:THREE.AdditiveBlending, depthWrite:false }),
-      nRay);
-    arrows.material.userData.baseOp = 0.95;
-    photons.forEach((ph,i)=>{
-      mid.copy(ph.s).lerp(ph.e, 0.22);  // 靠近光源，强化“光射向投影面”的方向
-      m4.compose(mid, q, scArrow); arrows.setMatrixAt(i, m4);
-    });
-    arrows.instanceMatrix.needsUpdate = true;
-    root.add(arrows);
-
-    // 流动光子（大号发光圆点）
+    // 运动粒子流：每条光线上 RAY_PPR 个错相分布的发光粒子，
+    // 持续从光源一侧流向投影面（运动方向即投影方向，取代静态箭头）。
+    // sizeAttenuation:false → 粒子为固定屏幕像素大小，正交相机/任意缩放下都清晰可见
+    const nP = nRay * RAY_PPR;
     const pg = new THREE.BufferGeometry();
-    pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nRay*3), 3));
+    pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nP*3), 3));
     const pts = new THREE.Points(pg, new THREE.PointsMaterial({
-      color:0xffffff, map:glowTex, size:0.85, transparent:true, opacity:1,
-      depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true
+      color:0xffffff, map:glowTex, size:S.rayPSize*renderer.getPixelRatio(),
+      transparent:true, opacity:RAY_PARTICLE_OP,
+      depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:false
     }));
-    pts.material.userData.baseOp = 1;
+    pts.material.userData.baseOp = RAY_PARTICLE_OP;
     pts.userData.photons = photons;
-    pts.userData.offsets = photons.map(()=>Math.random());
+    pts.userData.ppr = RAY_PPR;
+    pts.userData.offsets = Array.from({length:nP}, (_,i)=> (i % RAY_PPR)/RAY_PPR + Math.random()*0.12);
     root.add(pts);
 
     rayGroup.add(root);
@@ -1050,10 +1047,11 @@ function updateRays(dt){
       if(o.material && o.material.userData.baseOp !== undefined) o.material.opacity = o.material.userData.baseOp * fade;
     });
     const pts = b.pts, pos = pts.geometry.attributes.position;
-    const phs = pts.userData.photons, offs = pts.userData.offsets;
-    for(let i=0;i<phs.length;i++){
-      offs[i] = (offs[i] + dt*0.38) % 1;
-      const ph = phs[i], t = offs[i];
+    pts.material.size = S.rayPSize * renderer.getPixelRatio();  // 滑块实时调粒子大小（0 即不渲染）
+    const phs = pts.userData.photons, offs = pts.userData.offsets, ppr = pts.userData.ppr;
+    for(let i=0;i<offs.length;i++){
+      offs[i] = (offs[i] + dt*S.rayPSpeed) % 1;                // 滑块实时调流速（0 即静止）
+      const ph = phs[Math.floor(i/ppr)], t = offs[i];
       pos.setXYZ(i,
         ph.s.x+(ph.e.x-ph.s.x)*t,
         ph.s.y+(ph.e.y-ph.s.y)*t,
@@ -1161,9 +1159,12 @@ function panelDef(){
   return [
     { title:'调整图形', items:fig },
     { title:'调整视角', items:view },
-    { title:'光线', items:[{ t:'buttons', buttons:[
-      {id:'toggle-rayF',label:'前方光'},{id:'toggle-rayT',label:'上方光'},{id:'toggle-rayS',label:'侧方光'} ]}]
-    }
+    { title:'光线', items:[
+      { t:'buttons', buttons:[
+        {id:'toggle-rayF',label:'前方光'},{id:'toggle-rayT',label:'上方光'},{id:'toggle-rayS',label:'侧方光'} ]},
+      { t:'range', id:'rayPSize', label:'粒子大小', min:0, max:24, step:0.5, fmt:v=>v.toFixed(1)+' px' },
+      { t:'range', id:'rayPSpeed', label:'粒子速度', min:0, max:1, step:0.01, fmt:v=>(v*100).toFixed(0)+'%' }
+    ]}
   ];
 }
 let CONTROLS = panelDef();
