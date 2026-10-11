@@ -161,9 +161,6 @@
 <header id="topbar">
   <div id="title"><h1>初中数学 · 投影与视图</h1><span class="mono">PROJECTION &amp; VIEWS</span></div>
   <div id="shape-bar">
-    <button class="sbtn" id="b-shape-prism" type="button" title="三棱柱">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="M13 4 L21 10 L13 16 Z M4 7 L10 10 L4 15 Z M13 4 L4 7 M13 16 L4 15 M21 10 L10 10"/></svg><span>三棱柱</span>
-    </button>
     <button class="sbtn" id="b-shape-cylinder" type="button" title="圆柱">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><ellipse cx="12" cy="7.5" rx="7" ry="3"/><path d="M5 7.5 V16.5 M19 7.5 V16.5 M5 16.5 a7 3 0 0 0 14 0"/></svg><span>圆柱</span>
     </button>
@@ -172,6 +169,9 @@
     </button>
     <button class="sbtn" id="b-shape-sphere" type="button" title="球">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><ellipse cx="12" cy="12" rx="3.4" ry="8"/><path d="M4 12 a8 3.2 0 0 0 16 0"/></svg><span>球</span>
+    </button>
+    <button class="sbtn" id="b-shape-prism" type="button" title="三棱柱">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="M13 4 L21 10 L13 16 Z M4 7 L10 10 L4 15 Z M13 4 L4 7 M13 16 L4 15 M21 10 L10 10"/></svg><span>三棱柱</span>
     </button>
   </div>
   <div class="spacer"></div>
@@ -233,9 +233,9 @@ const VIEW_COLORS = { V:0x6fb3d2, H:0x7fc2a6, W:0xb99cc9 };
 const VIEW_LABELS = { V:'主视图', H:'俯视图', W:'左视图' };
 
 const S = {
-  solid:'prism',                   // 立体图形
+  solid:'cylinder',                // 立体图形（打开页面默认展示圆柱）
   a:4, h:5, r:2.2, yaw:0,          // 几何参数 / 绕竖轴旋转
-  az:-30, el:30, zoom:1, autoRot:false, autoSpeed:0.35, ortho:true, // 默认：正视略向右下倾斜约30°（相机在形体左前上方，看到的都是三面的正面）
+  az:-30, el:30, zoom:1, ortho:true, // 默认：正视略向右下倾斜约30°（相机在形体左前上方，看到的都是三面的正面）
   rayF:true, rayT:true, rayS:true, // 三方向光线开关
   unfold:0,                        // 0 折叠 / 1 展开（平滑值在 A 中）
   xray:false                       // 透视（虚线显示被遮挡线段）
@@ -432,15 +432,18 @@ function greatCircle(center, r, plane, n=72){
  *    dots       可能投影到视图内部的点（如锥顶）
  *    loops      闭合曲线 {pts, norm(p)->Vector3|Vector3[]}
  *    allPoints  包围盒/投影用全部采样点
- *    rayPoints(localDir) 光线穿过的局部点
+ *    raySamples(localDir) 光线候选点 [{p:局部点, v:是否真实顶点（必发光）}]，
+ *                         统一由 buildRays 在投影凸包轮廓上等距采样
  *    prism 专用：edges / edgeFaces / faces3 / verts（三角形面顶点表）
  * ========================================================== */
 const prismGroup = new THREE.Group();          // 整体姿态（tilt + 平移）
-const yawGroup   = new THREE.Group();          // 绕竖轴旋转
+const yawGroup   = new THREE.Group();          // 绕竖轴旋转（原点置于图形中心）
 prismGroup.add(yawGroup);
 scene.add(prismGroup);
-const solidHolder = new THREE.Group(); yawGroup.add(solidHolder);
-const xrayHolder = new THREE.Group(); yawGroup.add(xrayHolder);
+const centerGroup = new THREE.Group();         // 把几何体平移 -图形中心，使竖轴正好穿过图形中心
+yawGroup.add(centerGroup);
+const solidHolder = new THREE.Group(); centerGroup.add(solidHolder);
+const xrayHolder = new THREE.Group(); centerGroup.add(xrayHolder);
 
 /* 三棱柱面/棱表 */
 const PRISM_FACES = [
@@ -511,14 +514,14 @@ const SOLIDS = {
       const pickLines = PRISM_EDGES.map(([i,j],e)=>
         makePickLine([verts[i].clone(), verts[j].clone()], false, PRISM_EDGE_NAMES[e], [i,j]));
 
-      // 光线候选：6 个顶点 + 9 条棱中点（是否为轮廓切点由 buildRays 统一筛选）
-      const raySet = verts.slice();
-      PRISM_EDGES.forEach(([i,j])=> raySet.push(verts[i].clone().lerp(verts[j],0.5)));
+      // 光线候选：6 个顶点（等间距轮廓光线由 buildRays 沿凸包轮廓统一采样）
+      const raySamples = verts.map(p=>({ p:p.clone(), v:true }));
 
       return {
         kind:'prism', faces, pickLines, verts, dots:[], loops:[], allPoints:verts.slice(),
+        center:new THREE.Vector3(0,h/2,0),   // 底面正三角形重心在 (0,0,0)，旋转轴穿过重心
         edges:PRISM_EDGES, edgeFaces:PRISM_EDGE_FACES, faces3:PRISM_FACES,
-        rayPoints:()=>raySet
+        raySamples:()=>raySamples
       };
     }
   },
@@ -547,12 +550,12 @@ const SOLIDS = {
         makePickLine(rimB, true, '下底圆')
       ];
       const verts = [ new THREE.Vector3(0,h,0), new THREE.Vector3(0,0,0) ];
-      const rimCand = [];
-      loops.forEach(lp=>{
-        for(let i=0;i<20;i++) rimCand.push(lp.pts[Math.round(i/20*lp.pts.length) % lp.pts.length].clone());
-      });
+      // 上下底圆作为密集候选：凸包轮廓即矩形（水平光）或圆（顶视光），由 buildRays 等距采样
+      const raySamples = rimT.concat(rimB).map(p=>({ p:p.clone(), v:false }));
       return { kind:'cylinder', faces, pickLines, verts, dots:[], loops, allPoints:rimT.concat(rimB),
-        rayPoints:()=>rimCand };
+        center:new THREE.Vector3(0,h/2,0),
+        raySamples:()=>raySamples
+      };
     }
   },
 
@@ -577,11 +580,14 @@ const SOLIDS = {
       }];
       const pickLines = [ makePickLine(rim, true, '底圆') ];
       const apex = new THREE.Vector3(0,h,0), center = new THREE.Vector3(0,0,0);
-      const rimCand = [];
-      for(let i=0;i<20;i++) rimCand.push(loops[0].pts[Math.round(i/20*loops[0].pts.length) % loops[0].pts.length].clone());
-      rimCand.push(apex);
+      // 底圆密集点 + 锥顶（标记为顶点，必发光）；水平光凸包=等腰三角形（两轮廓母线+底边），顶视=圆
+      const raySamples = rim.map(p=>({ p:p.clone(), v:false }))
+        .concat([{ p:apex.clone(), v:true }]);
       return { kind:'cone', faces, pickLines, verts:[apex, center], dots:[apex], loops,
-        allPoints:rim.concat([apex]), rayPoints:()=>rimCand };
+        center:new THREE.Vector3(0,h/2,0),
+        allPoints:rim.concat([apex]),
+        raySamples:()=>raySamples
+      };
     }
   },
 
@@ -604,18 +610,18 @@ const SOLIDS = {
       const pickLines = loops.map((lp,i)=> makePickLine(lp.pts, true, ['经线','经线','赤道'][i], null, 0.55));
       return {
         kind:'sphere', faces, pickLines, verts:[], dots:[], loops, noProjLoops:true,
-        sphereCircle:{ center:c, r },
+        sphereCircle:{ center:c, r }, center:c,
         allPoints: loops[0].pts.concat(loops[1].pts, loops[2].pts),
-        rayPoints:(dirLocal)=>{
-          // 仅保留轮廓大圆上的光线
+        raySamples:(dirLocal)=>{
+          // 球面轮廓是一个大圆：沿光向看，该大圆上的所有光线都与球相切
           const up = Math.abs(dirLocal.y) > 0.9 ? new THREE.Vector3(1,0,0) : new THREE.Vector3(0,1,0);
           const t1 = new THREE.Vector3().crossVectors(dirLocal, up).normalize();
           const t2 = new THREE.Vector3().crossVectors(dirLocal, t1).normalize();
-          const out = [];   // 只取轮廓大圆：光线与球相切，不会穿过球体
-          const N = 20;
+          const out = [];
+          const N = 72;
           for(let i=0;i<N;i++){
             const a = i/N*Math.PI*2;
-            out.push(c.clone().addScaledVector(t1, r*Math.cos(a)).addScaledVector(t2, r*Math.sin(a)));
+            out.push({ p:c.clone().addScaledVector(t1, r*Math.cos(a)).addScaledVector(t2, r*Math.sin(a)), v:false });
           }
           return out;
         }
@@ -625,6 +631,7 @@ const SOLIDS = {
 };
 
 let D = null;
+let solidCenter = new THREE.Vector3();   // 当前几何体的旋转对称中心（局部坐标）
 
 /* 绕竖轴旋转（“顶点朝前/朝后”只是该角度的快捷方式） */
 function applyPoseRotations(){
@@ -632,15 +639,14 @@ function applyPoseRotations(){
   yawGroup.rotation.set(0, A.yaw*Math.PI/180, 0);
 }
 function layoutSolid(){
+  // 旋转枢轴放在形体真实中心（棱柱为底面重心轴、柱/锥为轴线、球为球心），
+  // 绕竖轴旋转时形体原地自转、不绕偏轴画圈，且中心始终位于场景中心(0,5,0)
+  solidCenter = D.center.clone();
+  yawGroup.position.copy(solidCenter);
+  centerGroup.position.copy(solidCenter).negate();
+  const ty = DV.yH + DV.L/2;
+  prismGroup.position.set(-solidCenter.x, ty - solidCenter.y, -solidCenter.z);
   applyPoseRotations();
-  prismGroup.position.set(0,0,0);
-  prismGroup.updateMatrixWorld(true);
-  const box = new THREE.Box3();
-  D.allPoints.forEach(p=> box.expandByPoint(p.clone().applyMatrix4(yawGroup.matrixWorld)));
-  const c = box.getCenter(new THREE.Vector3());
-  // 包围盒中心置于 (0,5,0)：形体在 V/H/W 三个 12×12 面上的投影都恰好居中，
-  // 且光线沿轮廓切点直达投影图形，保持几何一致
-  prismGroup.position.set(-c.x, DV.yH + DV.L/2 - c.y, -c.z);
   prismGroup.updateMatrixWorld(true);
 }
 function applyFaceBaseline(){
@@ -665,7 +671,7 @@ function rebuildSolid(){
   hiddenDirty = true;
 }
 const _wv = new THREE.Vector3();
-function worldPoint(p){ return p.clone().applyMatrix4(yawGroup.matrixWorld); }
+function worldPoint(p){ return p.clone().applyMatrix4(centerGroup.matrixWorld); }
 function viewerLocal(worldDir){
   yawGroup.getWorldQuaternion(_q).invert();
   return worldDir.clone().applyQuaternion(_q);
@@ -680,7 +686,7 @@ const selTube = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color:COL.hi, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false })
 );
 selTube.visible = false;
-yawGroup.add(selTube);
+centerGroup.add(selTube);
 
 function clearSelection(silent){
   if(selFace) applyFaceBaseline();
@@ -767,9 +773,6 @@ const VIEW_DIR = {
   H: new THREE.Vector3(0,1,0),
   W: new THREE.Vector3(-1,0,0)
 };
-const _shift = new THREE.Vector2();
-/* 各视图投影为居中而做的世界坐标平移（光线端点需同步，保证光线仍指向投影图形） */
-const VIEW_SHIFTS = { V:new THREE.Vector3(), H:new THREE.Vector3(), W:new THREE.Vector3() };
 
 function prismFaceNormalsWorld(wv){
   const center = new THREE.Vector3();
@@ -796,28 +799,13 @@ function buildProjections(){
   const worldDots = D.dots.map(worldPoint);
   const allWorld = worldVerts.concat(...loopWorld);
 
-  const cy = DV.yH + DV.L/2;        // 竖立面（V/W）投影中心高度
   const defs = {
-    V: { pts:p=>[p.x,p.y], center:[0,cy], to3:(u,v)=> new THREE.Vector3(u, v, DV.zV) },
-    H: { pts:p=>[p.x,p.z], center:[0,0],  to3:(u,v)=> new THREE.Vector3(u, 0, v - DV.zV) },
-    W: { pts:p=>[p.z,p.y], center:[0,cy], to3:(u,v)=> new THREE.Vector3(0, v, u - DV.zV) }
+    V: { pts:p=>[p.x,p.y], to3:(u,v)=> new THREE.Vector3(u, v, DV.zV) },
+    H: { pts:p=>[p.x,p.z], to3:(u,v)=> new THREE.Vector3(u, 0, v - DV.zV) },
+    W: { pts:p=>[p.z,p.y], to3:(u,v)=> new THREE.Vector3(0, v, u - DV.zV) }
   };
-  // 计算各视图居中偏移（同时供光线端点使用）
-  for(const view of ['V','H','W']){
-    const def = defs[view];
-    let bx0=Infinity,bx1=-Infinity,by0=Infinity,by1=-Infinity;
-    allWorld.forEach(p=>{
-      const q = def.pts(p);
-      if(q[0]<bx0)bx0=q[0]; if(q[0]>bx1)bx1=q[0];
-      if(q[1]<by0)by0=q[1]; if(q[1]>by1)by1=q[1];
-    });
-    const shX = def.center[0] - (bx0+bx1)/2;
-    const shY = def.center[1] - (by0+by1)/2;
-    def.shift = [shX, shY];
-    if(view==='V') VIEW_SHIFTS.V.set(shX, shY, 0);
-    else if(view==='H') VIEW_SHIFTS.H.set(shX, 0, shY);
-    else VIEW_SHIFTS.W.set(0, shY, shX);
-  }
+  // 旋转轴穿过形体重心（棱柱底面重心、柱/锥轴线、球心）且形体中心置于(0,5,0)，
+  // 三个视图的投影天然以重心轴为中心，无需任何平移（光线与投影位置严格一致）
   for(const view of ['V','H','W']) buildOneView(view, defs[view], worldVerts, loopWorld, worldDots, allWorld);
 }
 
@@ -826,7 +814,7 @@ function buildOneView(view, def, worldVerts, loopWorld, worldDots, allWorld){
   clearGroup(g);
   const col = VIEW_COLORS[view];
   const raw2 = p=> new THREE.Vector2(def.pts(p)[0], def.pts(p)[1]);
-  const to2 = p=> raw2(p).add(_shift.set(def.shift[0], def.shift[1]));
+  const to2 = raw2;
 
   // 轮廓（球：任何方向下投影都是精确圆，直接按圆心+半径生成，避免采样凸包失真）
   let hull;
@@ -930,50 +918,73 @@ function makeGlowTexture(){
 }
 const glowTex = makeGlowTexture();
 
-function dedupePoints(points, dir){
-  // 按垂直于光线方向的投影去重
-  const up = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1,0,0) : new THREE.Vector3(0,1,0);
-  const t1 = new THREE.Vector3().crossVectors(dir, up).normalize();
-  const t2 = new THREE.Vector3().crossVectors(dir, t1).normalize();
-  const map = new Map();
-  points.forEach(p=>{
-    const k = Math.round(p.dot(t1)*20)/20 + '|' + Math.round(p.dot(t2)*20)/20;
-    if(!map.has(k)) map.set(k, p);
-  });
-  return [...map.values()];
-}
 function rayEndpoints(dirKey, p){
-  // 端点随对应投影面的居中偏移整体平移，光线方向保持不变
-  const sh = dirKey==='F' ? VIEW_SHIFTS.V : dirKey==='T' ? VIEW_SHIFTS.H : VIEW_SHIFTS.W;
-  if(dirKey==='F') return [ new THREE.Vector3(p.x+sh.x,p.y+sh.y,p.z+8),  new THREE.Vector3(p.x+sh.x,p.y+sh.y,DV.zV) ];
-  if(dirKey==='T') return [ new THREE.Vector3(p.x+sh.x,p.y+8,p.z+sh.z),  new THREE.Vector3(p.x+sh.x,DV.yH,p.z+sh.z) ];
-  return [ new THREE.Vector3(p.x-8,p.y+sh.y,p.z+sh.z), new THREE.Vector3(DV.xW,p.y+sh.y,p.z+sh.z) ];
+  // 光线严格穿过轮廓点 p（世界坐标），方向与光向一致：端点不再做任何横向平移
+  if(dirKey==='F') return [ new THREE.Vector3(p.x,p.y,p.z+8),  new THREE.Vector3(p.x,p.y,DV.zV) ];
+  if(dirKey==='T') return [ new THREE.Vector3(p.x,p.y+8,p.z),  new THREE.Vector3(p.x,DV.yH,p.z) ];
+  return [ new THREE.Vector3(p.x-8,p.y,p.z), new THREE.Vector3(DV.xW,p.y,p.z) ];
 }
-/* 轮廓切点筛选：从光源侧与投影面侧分别对形体发射射线，
-   只有两侧都“最先在 p 附近相遇（或完全错过）”的点才是光线轮廓点，
-   这样光线只会擦过形体，不会穿入再从背面穿出。 */
-const _silRC = new THREE.Raycaster();
-const _silO = new THREE.Vector3();
-function silhouetteWorld(points, dirWorld){
-  const d = dirWorld.clone().normalize(), TOL = 0.12;
-  return points.filter(p=>{
-    _silO.copy(p).addScaledVector(d, 8);
-    _silRC.set(_silO, d.clone().negate());
-    const h1 = _silRC.intersectObjects(D.faces, false)[0];
-    if(h1 && h1.distance < 8 - TOL) return false;
-    _silO.copy(p).addScaledVector(d, -8);
-    _silRC.set(_silO, d);
-    const h2 = _silRC.intersectObjects(D.faces, false)[0];
-    if(h2 && h2.distance < 8 - TOL) return false;
-    return true;
+const RAY_SPACING = 1.0;   // 投影轮廓上每隔该弧长（世界单位）均匀分布一条光线
+/* 统一轮廓光线采样（所有形体同一套规则）：
+   1) 形体与候选点正交投影到垂直于光线的平面，求投影凸包（= 该方向的投影轮廓）；
+   2) 沿凸包周长每隔 RAY_SPACING 取一个点，凸包上的真实顶点（棱柱顶点、锥顶）强制保留；
+   3) 采样点在相邻轮廓源点之间按弧长线性插值回三维 —— 光线位于形体支撑平面内，
+      只切过边缘/顶点/轮廓母线，数学上不会穿入形体内部，且各形状密度一致、均匀分布。 */
+function silhouetteTargetsWorld(localDir, dirWorld){
+  const d = dirWorld.clone().normalize();
+  const up = Math.abs(d.y) > 0.9 ? new THREE.Vector3(1,0,0) : new THREE.Vector3(0,1,0);
+  const t1 = new THREE.Vector3().crossVectors(d, up).normalize();
+  const t2 = new THREE.Vector3().crossVectors(d, t1).normalize();
+  const cand = D.raySamples(localDir).map(c=>{
+    const p = worldPoint(c.p);
+    return { p, v:c.v, u:p.dot(t1), w:p.dot(t2) };
   });
+  const hull2 = convexHull(cand.map(c=> new THREE.Vector2(c.u, c.w)));
+  if(hull2.length < 3) return cand.map(c=>c.p);
+  // 凸包顶点回溯到三维源点；多个源点投影重合时（如圆柱俯视的上下底圆）取靠光源侧者
+  const nodes = hull2.map(q=>{
+    let best = null;
+    for(const c of cand){
+      if(Math.hypot(c.u-q.x, c.w-q.y) > 1e-6) continue;
+      if(!best || c.p.dot(d) < best.p.dot(d)) best = c;
+    }
+    return best || cand[0];
+  });
+  const n = nodes.length;
+  const nodePos = new Array(n);           // 每个凸包顶点在闭合周长上的弧长位置
+  const segs = [];
+  let total = 0;
+  for(let i=0;i<n;i++){
+    nodePos[i] = total;
+    const a = hull2[i], b = hull2[(i+1)%n];
+    const L = a.distanceTo(b);
+    if(L > 1e-9){ segs.push({ a:nodes[i], b:nodes[(i+1)%n], s0:total, L }); total += L; }
+  }
+  const out = [];
+  // 强制保留：凸包上的真实顶点（含锥顶）
+  const forced = [];
+  nodes.forEach((nd,i)=>{ if(nd.v){ forced.push(nodePos[i]); out.push(nd.p); } });
+  const cycDist = s=>{
+    let m = Infinity;
+    for(const f of forced){ const dd = Math.abs(s-f); m = Math.min(m, dd, total-dd); }
+    return m;
+  };
+  // 等间距采样（避开距顶点过近的位置，防止与顶点光重叠）
+  const nStep = Math.floor((total - 1e-6)/RAY_SPACING);
+  for(let i=0;i<=nStep;i++){
+    const s = i*RAY_SPACING;
+    if(forced.length && cycDist(s) < RAY_SPACING*0.32) continue;
+    const sg = segs.find(g=> s >= g.s0 - 1e-9 && s < g.s0 + g.L - 1e-9) || segs[segs.length-1];
+    const t = THREE.MathUtils.clamp((s - sg.s0)/sg.L, 0, 1);
+    out.push(sg.a.p.clone().lerp(sg.b.p, t));
+  }
+  return out;
 }
 function buildRays(){
   for(const k of ['F','T','S']){
     if(rayBuilt[k]){ rayGroup.remove(rayBuilt[k].root); clearGroup(rayBuilt[k].root); rayBuilt[k]=null; }
     const localDir = viewerLocal(RAY_DIRS[k].world);
-    const cand = silhouetteWorld(D.rayPoints(localDir).map(worldPoint), RAY_DIRS[k].world);
-    const targetsWorld = dedupePoints(cand, RAY_DIRS[k].world);
+    const targetsWorld = silhouetteTargetsWorld(localDir, RAY_DIRS[k].world);
 
     const root = new THREE.Group();
     const photons = [];
@@ -1073,7 +1084,7 @@ const wLabelGroup = new THREE.Group(); wPivot.add(wLabelGroup);
 function buildDirLabels(){
   clearGroup(hLabelGroup); clearGroup(wLabelGroup);
   const l1 = makeLabel(VIEW_LABELS.V, hex(VIEW_COLORS.V), 0.9); l1.position.set(0, DV.yH+DV.vH+0.9, DV.zV); vGroup.add(l1);
-  const l2 = makeLabel(VIEW_LABELS.H, hex(VIEW_COLORS.H), 0.9); l2.position.set(0, -0.9, DV.hD*0.55); hLabelGroup.add(l2);
+  const l2 = makeLabel(VIEW_LABELS.H, hex(VIEW_COLORS.H), 0.9); l2.position.set(0, -0.9, DV.hD + 0.5); hLabelGroup.add(l2);
   const l3 = makeLabel(VIEW_LABELS.W, hex(VIEW_COLORS.W), 0.9); l3.position.set(0.15, DV.yH+DV.vH+0.9, DV.wD*0.55); wLabelGroup.add(l3);
 }
 
@@ -1140,13 +1151,11 @@ function panelDef(){
       {id:'pose-front',label:'顶点朝前'},{id:'pose-back',label:'顶点朝后'} ]});
   }
 
-  // —— 调整视角：视图 / 展开透视 / 缩放 / 自动旋转（拖动画面亦可直接旋转）——
+  // —— 调整视角：视图 / 展开透视 / 缩放（拖动画面亦可直接旋转）——
   const view = [
     { t:'buttons', buttons:[{id:'focusFront',label:'正视'},{id:'focusTop',label:'俯视'},{id:'focusSide',label:'侧视'}] },
     { t:'buttons', buttons:[{id:'toggle-unfold',label:'展开'},{id:'toggle-xray',label:'透视'},{id:'reset-view',label:'重置'}] },
-    { t:'range', id:'zoom', label:'缩放', min:0.4, max:2.6, step:0.01, fmt:v=>v.toFixed(2)+'×' },
-    { t:'toggle', id:'autoRot', label:'自动旋转' },
-    { t:'range', id:'autoSpeed', label:'旋转速度', min:0, max:2, step:0.05, fmt:v=>v.toFixed(2) }
+    { t:'range', id:'zoom', label:'缩放', min:0.4, max:2.6, step:0.01, fmt:v=>v.toFixed(2)+'×' }
   ];
 
   return [
@@ -1200,6 +1209,17 @@ function buildPanel(){
       });
     }
   }));
+
+  // 面板底部：全屏（大触摸目标，撑满整行）
+  const foot = document.createElement('div');
+  foot.className = 'sec';
+  foot.style.marginBottom = '4px';
+  foot.innerHTML = `<div class="row" style="margin-bottom:0"><div class="btnrow">
+    <button class="btn" type="button" id="b-toggle-fullscreen" style="flex:1 1 100%">全屏</button>
+  </div></div>`;
+  host.appendChild(foot);
+  document.getElementById('b-toggle-fullscreen').addEventListener('click', ()=> buttonAction('toggle-fullscreen'));
+
   updateButtons();
 }
 function setSliderLabel(id, txt){ const e = document.getElementById('v-'+id); if(e) e.textContent = txt; }
@@ -1223,9 +1243,7 @@ function buttonAction(id){
   else if(id === 'focusTop') setView(0, 89.9, 1.0, new THREE.Vector3(0, DV.yH, DV.zV+DV.hD/2));
   else if(id === 'focusSide') setView(-90, 0, 1.0, new THREE.Vector3(DV.xW, DV.yH+DV.vH/2, DV.zV+DV.wD/2));
   else if(id === 'reset-view'){
-    // 视角与方位回到打开页面时的默认状态（并停止自动旋转，避免视角立刻漂走）
-    S.autoRot = false;
-    const ar = document.getElementById('c-autoRot'); if(ar) ar.checked = false;
+    // 视角与方位回到打开页面时的默认状态
     setView(DEFAULT_VIEW.az, DEFAULT_VIEW.el, DEFAULT_VIEW.zoom, DEFAULT_VIEW.target.clone());
   }
   else if(id.startsWith('shape-')){
@@ -1251,6 +1269,10 @@ function buttonAction(id){
     S[key] = !S[key];
     updateButtons();
   }
+  else if(id === 'toggle-fullscreen'){
+    if(document.fullscreenElement) document.exitFullscreen?.();
+    else document.documentElement.requestFullscreen?.();
+  }
 }
 function setBtn(id, on){ const e = document.getElementById('b-'+id); if(e) e.classList.toggle('on', !!on); }
 function updateButtons(){
@@ -1267,6 +1289,11 @@ function updateButtons(){
     const [az,el] = VIEW_BTN[id];
     setBtn(id, Math.abs(S.az-az)<0.5 && Math.abs(S.el-el)<0.5);
   });
+  const fs = document.getElementById('b-toggle-fullscreen');
+  if(fs){
+    fs.classList.toggle('on', !!document.fullscreenElement);
+    fs.textContent = document.fullscreenElement ? '退出全屏' : '全屏';
+  }
 }
 
 /* 面板贴边显隐拉片（触屏默认收起） */
@@ -1278,6 +1305,9 @@ if(innerWidth <= 820) document.body.classList.add('panel-off');
 document.querySelectorAll('#shape-bar .sbtn').forEach(b=>{
   b.addEventListener('click', ()=> buttonAction('shape-' + b.id.slice('b-shape-'.length)));
 });
+
+/* 全屏状态变化（含 Esc 退出）时同步按钮文字与高亮 */
+document.addEventListener('fullscreenchange', updateButtons);
 
 /* ============================================================
  *  11. 交互：单指旋转 / 滚轮与双指缩放 / 点选高亮
@@ -1363,11 +1393,6 @@ function animate(){
     A[k] += (S[k] - A[k]) * Math.min(1, dt*9);
     if(Math.abs(S[k]-A[k]) < 1e-3) A[k] = S[k];
   }
-  if(S.autoRot){
-    S.az = ((S.az + S.autoSpeed*40*dt + 180) % 360 + 360) % 360 - 180;
-    updateButtons();
-  }
-
   // 形体 / 几何 / 旋转变化 → 重建
   const geoKey = `${S.solid}|${A.a.toFixed(2)}|${A.h.toFixed(2)}|${A.r.toFixed(2)}|${A.yaw.toFixed(1)}`;
   if(geoKey !== lastGeoKey){
