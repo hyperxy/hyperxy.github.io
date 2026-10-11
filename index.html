@@ -1,374 +1,1419 @@
 <!DOCTYPE html>
-<html>
-    <head>
-    <meta http-equiv="content-type" content="text/html; charset=utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" >
-    <title>
-        
-        XY&#39;s
-        
-    </title>
-    <link rel="icon" href= /assests/favicon.ico>
-    <!-- TODO: 在font-face加载完毕后改变字体  -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/webfont/1.6.28/webfontloader.js"></script>
-    <!-- 提前加载place holder  -->
-    <style type="text/css">
-        @font-face {
-            font-family: 'Oswald-Regular';
-            src: url(/font/Oswald-Regular.ttf);
-        }
-    </style>
-    <style type="text/css">
-        .site-intro-placeholder {
-            position: absolute;
-            z-index: -2;
-            top: 0;
-            left: 0px;
-            width: calc(100% + 300px);
-            height: 100%;
-            background: repeating-linear-gradient(-45deg, #444 0, #444 80px, #333 80px, #333 160px);
-            background-position: center center;
-            transform: translate3d(-226px, 0, 0);
-            animation: gradient-move 2.5s ease-out 0s 1;
-        }
-        @keyframes gradient-move {
-        0% {
-            transform: translate3d(-226px, 0, 0);
-        }
-        100% {
-            transform: translate3d(0, 0, 0);
-        }
-    }
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>初中数学 - 投影与视图 演示</title>
+<style>
+  :root{
+    --bg:#05070f;
+    --panel:rgba(9,18,33,.72);
+    --panel-brd:rgba(56,200,255,.20);
+    --txt:#d7ecff;
+    --txt-dim:#7fa6c4;
+    --accent:#22d3ee;
+    --accent2:#3b82f6;
+    --glow:rgba(34,211,238,.55);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+  body{
+    background:var(--bg);
+    color:var(--txt);
+    font-family:"PingFang SC","Microsoft YaHei","Source Han Sans SC",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-tap-highlight-color:transparent;
+  }
+  canvas#scene{position:fixed;inset:0;display:block;touch-action:none}
+  .mono{font-family:"JetBrains Mono","Cascadia Mono",Consolas,ui-monospace,monospace}
+
+  /* ---------- 顶栏 ---------- */
+  #topbar{
+    position:fixed;top:0;left:0;right:0;height:56px;z-index:20;
+    display:flex;align-items:center;gap:14px;padding:0 16px;
+    background:linear-gradient(180deg,rgba(6,12,24,.92),rgba(6,12,24,.35));
+    backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--panel-brd);
+  }
+  #title{display:flex;align-items:baseline;gap:10px;white-space:nowrap;min-width:0}
+  #title h1{font-size:17px;font-weight:700;letter-spacing:.5px}
+  #title span{font-size:11px;color:var(--txt-dim);letter-spacing:2px}
+  .spacer{flex:1}
+  .chip{
+    font-size:13px;padding:10px 18px;border-radius:999px;cursor:pointer;
+    border:1px solid var(--panel-brd);background:rgba(255,255,255,.05);
+    color:var(--txt);transition:.18s;white-space:nowrap;min-height:40px;
+  }
+  .chip:hover,.chip:active{border-color:var(--accent);box-shadow:0 0 12px var(--glow);color:var(--accent)}
+
+  /* ---------- 标题栏：立体图形切换 ---------- */
+  #shape-bar{display:flex;gap:8px;margin-left:10px}
+  .sbtn{
+    display:inline-flex;align-items:center;gap:7px;
+    height:38px;padding:0 13px;border-radius:10px;cursor:pointer;
+    font-size:13px;color:var(--txt);white-space:nowrap;
+    background:rgba(255,255,255,.05);border:1px solid var(--panel-brd);transition:.16s;
+  }
+  .sbtn svg{width:19px;height:19px;flex:none;opacity:.9}
+  .sbtn:hover,.sbtn:active{border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px var(--glow)}
+  .sbtn.on{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#04121c;font-weight:700;box-shadow:0 0 14px var(--glow)}
+  .sbtn.on svg{opacity:1}
+
+  /* ---------- 面板贴边收/展拉片 ---------- */
+  .edge-tab{
+    position:fixed;z-index:16;top:150px;width:24px;height:72px;
+    left:calc(14px + 296px);
+    border:1px solid var(--panel-brd);border-left:none;border-radius:0 10px 10px 0;
+    background:rgba(9,18,33,.78);backdrop-filter:blur(10px);
+    color:var(--accent);font-size:18px;line-height:1;cursor:pointer;transition:.2s;
+  }
+  .edge-tab:hover{width:28px;box-shadow:0 0 12px var(--glow)}
+  #tab-show{left:0;border-left:1px solid var(--panel-brd);border-radius:0 10px 10px 0;display:none}
+  body.panel-off #tab-hide{display:none}
+  body.panel-off #tab-show{display:block}
+
+  /* ---------- 侧栏 ---------- */
+  .panel{
+    position:fixed;z-index:15;
+    background:var(--panel);
+    backdrop-filter:blur(16px);
+    border:1px solid var(--panel-brd);
+    border-radius:14px;
+    box-shadow:0 10px 40px rgba(0,0,0,.45);
+  }
+  #panel-left{
+    left:14px;top:70px;bottom:14px;width:296px;
+    overflow-y:auto;overscroll-behavior:contain;
+    padding:10px 8px 18px 10px;
+    transition:transform .28s ease;
+    -webkit-overflow-scrolling:touch;
+  }
+  body.panel-off #panel-left{transform:translateX(-120%)}
+  .panel::-webkit-scrollbar{width:8px}
+  .panel::-webkit-scrollbar-thumb{background:rgba(90,180,230,.28);border-radius:8px}
+  .panel::-webkit-scrollbar-track{background:transparent}
+
+  .sec{margin-bottom:12px}
+  .sec-h{
+    font-size:11px;letter-spacing:2px;color:var(--accent);
+    padding:4px 8px 8px;border-bottom:1px dashed var(--panel-brd);margin-bottom:9px;
+    display:flex;align-items:center;gap:7px;
+  }
+  .sec-h::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 9px var(--accent)}
+  .row{margin:0 6px 13px}
+  .lab{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--txt-dim);margin-bottom:7px}
+  .lab b{color:var(--accent);font-weight:600;font-size:12px}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:6px;
+    background:linear-gradient(90deg,var(--accent2),var(--accent));
+    opacity:.9;outline:none;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:22px;height:22px;border-radius:50%;
+    background:radial-gradient(circle at 35% 35%,#fff,var(--accent));
+    border:1px solid rgba(255,255,255,.7);
+    box-shadow:0 0 10px var(--glow);cursor:pointer;
+  }
+  .btnrow{display:flex;flex-wrap:wrap;gap:8px}
+  .btn{
+    flex:1 1 auto;min-width:64px;min-height:44px;padding:9px 8px;border-radius:10px;cursor:pointer;font-size:14px;
+    background:rgba(255,255,255,.05);color:var(--txt);border:1px solid var(--panel-brd);transition:.16s;
+  }
+  .btn:hover,.btn:active{border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px var(--glow)}
+  .btn.on{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#04121c;font-weight:700;box-shadow:0 0 16px var(--glow)}
+  .btn-lg{flex:1 1 100%;min-height:54px;font-size:16px;letter-spacing:3px}
+  .btnrow + .btnrow{margin-top:8px}
+
+  /* ---------- 加载/错误 ---------- */
+  #boot{
+    position:fixed;inset:0;z-index:99;display:flex;flex-direction:column;gap:14px;
+    align-items:center;justify-content:center;background:var(--bg);
+    transition:opacity .5s;
+  }
+  #boot .ring{width:46px;height:46px;border-radius:50%;border:3px solid rgba(90,180,230,.2);border-top-color:var(--accent);animation:spin 1s linear infinite}
+  #boot p{font-size:12px;letter-spacing:3px;color:var(--txt-dim)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #boot.hide{opacity:0;pointer-events:none}
+  #err{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:200;display:none;
+    max-width:80vw;padding:20px 24px;border-radius:12px;background:#2a0d12;border:1px solid #ff5c7a;color:#ffd7de;font-size:13px;line-height:1.7}
+
+  @media (max-width:820px){
+    #topbar{height:50px;padding:0 12px;gap:6px}
+    #title h1{font-size:14px}
+    #title span{display:none}
+    #shape-bar{gap:6px;margin-left:4px}
+    .sbtn{height:34px;padding:0 9px;font-size:12px}
+    .sbtn svg{width:17px;height:17px}
+    #panel-left{top:60px;bottom:10px;left:10px;width:min(290px,86vw)}
+    .edge-tab{top:120px;left:calc(10px + min(290px,86vw))}
+    #tab-show{left:0}
+  }
+  @media (max-width:560px){
+    #title h1{font-size:12px}
+    .sbtn{padding:0 7px}
+    .sbtn span{display:none}
+  }
 </style>
-    <link rel="stylesheet" href = /css/style.css?v=20171020 />
-    <script src="//cdn.staticfile.org/jquery/3.2.1/jquery.min.js" defer></script>
-    
-    <script src="/scripts/main.js" defer></script>
-    <!-- 百度统计  -->
-    
-    <!-- 谷歌统计  -->
-    
 </head>
-    
-        <body class="home-body">
-    
-    
-<header class="header index-header">
+<body>
+<canvas id="scene"></canvas>
 
-    <div class="header-sidebar-menu">&#xe775;</div>
-    <!-- post页的toggle banner  -->
-    
-    <a class="home-link" href=/>XY's</a>
-</header>
-    <div class="wrapper">
-        <div class="site-intro">
-    
-    <!-- 主页  -->
-    
-    
-    <!-- 文章页  -->
-            
-    <div class="site-intro-img" style="background-image: url(http://pic.yupoo.com/xev513/931d4b87/a10c8c0a.jpg)"></div>
-    <div class="site-intro-placeholder"></div>
-    <div class="site-intro-meta">
-        <!-- 标题  -->
-        <h1 class="intro-title">
-            <!-- 主页  -->
-            
-            XY's
-            <!-- 文章页  -->
-            
-        </h1>
-        <!-- 副标题 -->
-        <p class="intro-subtitle">
-            <!-- 主页副标题  -->
-            
-            
-                true and through
-            
-            <!-- 文章页  -->
-            
-        </p>
-        <!-- 文章页meta -->
-        
-    </div>
-</div>
-        <img class="loading" src="/assets/loading.svg" style="display: block; margin: 6rem auto 0 auto; width: 6rem; height: 6rem;" />
-        <script>
-            var browser = {
-                    versions: function () {
-                        var u = window.navigator.userAgent;
-                        return {
-                            userAgent: u,
-                            trident: u.indexOf('Trident') > -1, //IE内核
-                            presto: u.indexOf('Presto') > -1, //opera内核
-                            webKit: u.indexOf('AppleWebKit') > -1, //苹果、谷歌内核
-                            gecko: u.indexOf('Gecko') > -1 && u.indexOf('KHTML') == -1, //火狐内核
-                            mobile: !!u.match(/AppleWebKit.*Mobile.*/), //是否为移动终端
-                            ios: !!u.match(/\(i[^;]+;( U;)? CPU.+Mac OS X/), //ios终端
-                            android: u.indexOf('Android') > -1 || u.indexOf('Linux') > -1, //android终端或者uc浏览器
-                            iPhone: u.indexOf('iPhone') > -1 || u.indexOf('Mac') > -1, //是否为iPhone或者安卓QQ浏览器
-                            iPad: u.indexOf('iPad') > -1, //是否为iPad
-                            webApp: u.indexOf('Safari') == -1, //是否为web应用程序，没有头部与底部
-                            weixin: u.indexOf('MicroMessenger') == -1, //是否为微信浏览器
-                            uc: u.indexOf('UCBrowser') > -1 //是否为android下的UC浏览器
-                        };
-                    }()
-                }
-
-            function fontLoaded(){
-                console.log('font loaded');
-                if (document.getElementsByClassName('site-intro-meta')) {
-                    document.getElementsByClassName('intro-title')[0].classList.add('intro-fade-in');
-                    document.getElementsByClassName('intro-subtitle')[0].classList.add('intro-fade-in');
-                    var postIntroTags = document.getElementsByClassName('post-intro-tags')[0],
-                        postIntroMeat = document.getElementsByClassName('post-intro-meta')[0];
-                        if (postIntroTags) {
-                            postIntroTags.classList.add('post-fade-in');
-                        }
-                        if (postIntroMeat) {
-                            postIntroMeat.classList.add('post-fade-in');
-                        }
-                    }
-                }
-                
-            console.log("userAgent:" + browser.versions.userAgent);
-            // UC不支持跨域，所以直接显示
-            if (browser.versions.uc) {
-                console.log("UCBrowser");
-                fontLoaded();
-            } else {
-                WebFont.load({
-                    custom: {
-                        families: ['Oswald-Regular']
-                    },
-                    loading: function () {  //所有字体开始加载
-                        // console.log('loading');
-                    },
-                    active: function () {  //所有字体已渲染
-                        fontLoaded();
-                    },
-                    inactive: function () { //字体预加载失败，无效字体或浏览器不支持加载
-                        console.log('inactive: timeout');
-                        fontLoaded();
-                    },
-                    timeout: 7000 // Set the timeout to two seconds
-                });
-            }
-        </script>
-        <div class="container container-unloaded">
-            <main class="main index-page">
-    
-    
-    
-        <article class="index-post">
-            <a class="content-show-full" href = "/2017/12/12/article-title/" >
-                    <h2 class="abstract-title">
-                        
-                        <span>article title</span>
-                    </h2>
-                <div class="abstract-content">
-                    This is an H1This is an H2任何数量的 = 和 - 都可以有效果。
-类 Atx 形式则是在行首插入 1 到 6 个 # ，对应到标题 1 到 6 阶，例如：
-这是 H1这是 H2这是 H6
-                </div>
-            </a>
-            <div class="abstract-post-meta">
-                <!-- tags  -->
-                
-                <!-- date  -->
-                <div class="abstract-date">
-                    <span class="abstract-calander iconfont-archer"></span><span class="abstract-time">2017/12/12</span>
-                </div>
-            </div>
-        </article>
-    
-    
-    
-        <article class="index-post">
-            <a class="content-show-full" href = "/2017/12/12/hello-world/" >
-                    <h2 class="abstract-title">
-                        
-                        <span>Hello World</span>
-                    </h2>
-                <div class="abstract-content">
-                    Welcome to Hexo! This is your very first post. Check documentation for more info. If you get any problems when using Hexo, you can find the answer in troubleshooting or you can ask me on GitHub.
-Quick StartCreate a new post1$ hexo new "My New Post"
-More info: Writing
-Run server1$ hexo server
-More...
-                </div>
-            </a>
-            <div class="abstract-post-meta">
-                <!-- tags  -->
-                
-                <!-- date  -->
-                <div class="abstract-date">
-                    <span class="abstract-calander iconfont-archer"></span><span class="abstract-time">2017/12/12</span>
-                </div>
-            </div>
-        </article>
-    
-    <!-- paginator  -->
-    
-</main>
-            <!-- profile -->
-            
-            <div class="profile">
-    <img class="profile-avatar" src= /avatar/pixel.jpg >
-    <div class="profile-name">XY</div>
-    
-    
-    <div class="profile-social">
-        
-    
-        
-            
-                <a href="mailto:qxy5@qq.com" class="iconfont-archer email" title=email ></a>
-            
-        
-    
-        
-            
-                <a href="//weibo.com/u/5585220689" class="iconfont-archer weibo" target="_blank" title="weibo"></a>
-            
-        
-    
-
-    </div>
-    
-    
-    
-</div>
-            
-        </div>
-        <footer class="footer footer-unloaded">
-    <!-- social  -->
-    
-    <div class="social">
-        
-    
-        
-            
-                <a href="mailto:qxy5@qq.com" class="iconfont-archer email" title=email ></a>
-            
-        
-    
-        
-            
-                <a href="//weibo.com/u/5585220689" class="iconfont-archer weibo" target="_blank" title="weibo"></a>
-            
-        
-    
-
-    </div>
-    
-    <!-- powered by Hexo  -->
-    <div class="copyright">
-        <span id="hexo-power">Powered by <a href="https://hexo.io/" target="_blank">Hexo</a></span><span class="iconfont-archer power">&#xe635;</span><span id="theme-info">Theme <a href="https://github.com/fi3ework/hexo-theme-archer" target="_blank">archer</a></span>
-    </div>
-    <!-- 不蒜子  -->
-    
-</footer>
-    </div>
-    <!-- toc -->
-    
-    <div class="back-top">&#xe639;</div>
-    <div class="sidebar">
-    <div class="sidebar-header sidebar-header-show-archive">
-        <div class="sidebar-category">
-            <span class="sidebar-archive-link"><span class="iconfont-archer">&#xe67d;</span>Archive</span>
-            <span class="sidebar-tags-link"><span class="iconfont-archer">&#xe610;</span>Tag</span>
-        </div>
-    </div>
-    <div class="sidebar-content sidebar-content-show-archive">
-          <div class="sidebar-archive">
-    <!-- 在ejs中将archive按照时间排序 -->
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    <div class="total-archive"> Total : 2 </div>
-    
-    <div class="post-archive">
-    
-    
-    
-    
-    <div class="archive-year"> 2017 </div>
-    <ul class="year-list">
-    
-    
-        <li class="archive-post-item">
-            <span class="archive-post-date">12/12</span><a class="archive-post-title" href= "/2017/12/12/article-title/" >article title</a>
-        </li>
-    
-    
-        <li class="archive-post-item">
-            <span class="archive-post-date">12/12</span><a class="archive-post-title" href= "/2017/12/12/hello-world/" >Hello World</a>
-        </li>
-    
-    </div>
+<header id="topbar">
+  <div id="title"><h1>初中数学 · 投影与视图</h1><span class="mono">PROJECTION &amp; VIEWS</span></div>
+  <div id="shape-bar">
+    <button class="sbtn" id="b-shape-prism" type="button" title="三棱柱">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="M13 4 L21 10 L13 16 Z M4 7 L10 10 L4 15 Z M13 4 L4 7 M13 16 L4 15 M21 10 L10 10"/></svg><span>三棱柱</span>
+    </button>
+    <button class="sbtn" id="b-shape-cylinder" type="button" title="圆柱">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><ellipse cx="12" cy="7.5" rx="7" ry="3"/><path d="M5 7.5 V16.5 M19 7.5 V16.5 M5 16.5 a7 3 0 0 0 14 0"/></svg><span>圆柱</span>
+    </button>
+    <button class="sbtn" id="b-shape-cone" type="button" title="圆锥">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="M12 4 L5 17.5 L19 17.5 Z M5 17.5 a7 3 0 0 0 14 0"/></svg><span>圆锥</span>
+    </button>
+    <button class="sbtn" id="b-shape-sphere" type="button" title="球">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><ellipse cx="12" cy="12" rx="3.4" ry="8"/><path d="M4 12 a8 3.2 0 0 0 16 0"/></svg><span>球</span>
+    </button>
   </div>
-        <div class="sidebar-tags">
-    <div class="sidebar-tags-name">
-    
-    </div>
-    <div class="tag-load-fail" style="display: none; color: #ccc; font-size: 0.6rem;">
-    缺失模块。<br/>
-    1、请确保node版本大于6.2<br/>
-    2、在博客根目录（注意不是archer根目录）执行以下命令：<br/>
-    <span style="color: #f75357; font-size: 1rem; line-height: 2rem;">npm i hexo-generator-json-content --save</span><br/>
-    3、在根目录_config.yml里添加配置：
-    <pre style="color: #888; font-size: 0.6rem;">
-jsonContent:
-  meta: false
-  pages: false
-  posts:
-    title: true
-    date: true
-    path: true
-    text: false
-    raw: false
-    content: false
-    slug: false
-    updated: false
-    comments: false
-    link: false
-    permalink: false
-    excerpt: false
-    categories: false
-    tags: true</pre>
-    </div> 
-    <div class="sidebar-tag-list"></div>
-</div>
-    </div>
-</div> 
-    <script>
-    var jsInfo = {
-        root: '/'
+  <div class="spacer"></div>
+</header>
+
+<aside class="panel" id="panel-left"></aside>
+<button class="edge-tab" id="tab-hide" type="button" title="收起面板">‹</button>
+<button class="edge-tab" id="tab-show" type="button" title="展开面板">›</button>
+
+<div id="boot"><div class="ring"></div><p>LOADING SCENE</p></div>
+<div id="err"></div>
+
+<script>
+  window.addEventListener('error', function(e){
+    var box=document.getElementById('err');
+    if(box && !box.dataset.once){
+      box.dataset.once='1';
+      box.style.display='block';
+      box.innerHTML='<b>加载/运行出错：</b><br>'+(e.message||e.error||'未知错误')+
+        '<br><br>本页通过 CDN 加载 Three.js，请确认网络可用；或改用本地 three 文件。';
     }
+  });
 </script>
-    <!-- 不蒜子  -->
-    
-    <!-- CNZZ统计  -->
-    
-    </div>
-    </body>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://registry.npmmirror.com/three/0.160.0/files/build/three.module.js",
+    "three/addons/": "https://registry.npmmirror.com/three/0.160.0/files/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+/* ============================================================
+ *  0. 常量与状态
+ * ========================================================== */
+const DV = {                       // 三个投影面的关键坐标（三个面同为 12×12 正方形）
+  zV: -6,        // 正立投影面所在 z
+  yH: -1,        // 水平投影面所在 y
+  xW: 6,         // 侧立投影面所在 x
+  L: 12,         // 投影面边长
+  vH: 12, vW: 12, hD: 12, wD: 12
+};
+
+/* 青蓝科技主题（固定） */
+const COL = {
+  solid:0x2bb6cf, solidEm:0x1d4ed8,
+  ray:0x9de7ff, arrow:0xeaf9ff, fold:0x3b82f6,
+  edge:0xcdeffb, hi:0xffd166, hidden:0x9fdcff
+};
+/* 三个投影面：三种不同的低饱和度半透明配色 */
+const VIEW_COLORS = { V:0x6fb3d2, H:0x7fc2a6, W:0xb99cc9 };
+const VIEW_LABELS = { V:'主视图', H:'俯视图', W:'左视图' };
+
+const S = {
+  solid:'prism',                   // 立体图形
+  a:4, h:5, r:2.2, yaw:0,          // 几何参数 / 绕竖轴旋转
+  az:42, el:24, zoom:1, autoRot:false, autoSpeed:0.35, ortho:true,
+  rayF:true, rayT:true, rayS:true, // 三方向光线开关
+  unfold:0,                        // 0 折叠 / 1 展开（平滑值在 A 中）
+  xray:false                       // 透视（虚线显示被遮挡线段）
+};
+const A = Object.assign({}, S);
+const TWEEN_KEYS = ['a','h','r','yaw','az','el','zoom','unfold'];
+
+/* ============================================================
+ *  1. 渲染器 / 场景 / 相机
+ * ========================================================== */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070f);
+
+const camState = { target: new THREE.Vector3(0, 4, 0) };
+const orthoSize = 15;
+let camPersp = new THREE.PerspectiveCamera(34, innerWidth/innerHeight, 0.1, 400);
+let camOrtho = new THREE.OrthographicCamera(-1,1,1,-1, -200, 400);
+let camera = camOrtho;
+
+function camViewDirWorld(out){
+  const az = THREE.MathUtils.degToRad(A.az), el = THREE.MathUtils.degToRad(A.el);
+  return out.set(Math.cos(el)*Math.sin(az), Math.sin(el), Math.cos(el)*Math.cos(az)).normalize();
+}
+function updateCamera(){
+  const az = THREE.MathUtils.degToRad(A.az), el = THREE.MathUtils.degToRad(A.el);
+  const d = 60;
+  const p = new THREE.Vector3(
+    camState.target.x + d*Math.cos(el)*Math.sin(az),
+    camState.target.y + d*Math.sin(el),
+    camState.target.z + d*Math.cos(el)*Math.cos(az)
+  );
+  const asp = innerWidth/innerHeight;
+  const sz = orthoSize / Math.max(0.35, A.zoom);
+  camOrtho.left = -sz*asp; camOrtho.right = sz*asp;
+  camOrtho.top = sz; camOrtho.bottom = -sz;
+  camOrtho.position.copy(p); camOrtho.up.set(0,1,0); camOrtho.lookAt(camState.target);
+  camOrtho.updateProjectionMatrix();
+  camPersp.fov = 34; camPersp.aspect = asp;
+  camPersp.position.copy(p); camPersp.up.set(0,1,0); camPersp.lookAt(camState.target);
+  camPersp.updateProjectionMatrix();
+  camera = S.ortho ? camOrtho : camPersp;
+}
+
+/* ---- 灯光 ---- */
+scene.add(new THREE.AmbientLight(0x9fc6ff, 0.55));
+scene.add(new THREE.HemisphereLight(0x88c8ff, 0x0a1424, 0.7));
+const key = new THREE.DirectionalLight(0xffffff, 1.35); key.position.set(14, 22, 16); scene.add(key);
+const fill = new THREE.DirectionalLight(0x4aa8ff, 0.75); fill.position.set(-16, 8, 10); scene.add(fill);
+const rim = new THREE.PointLight(0x22d3ee, 90, 90); rim.position.set(-8, 6, -12); scene.add(rim);
+
+/* ---- 后处理：辉光（固定柔和强度） ---- */
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.30, 0.5, 0.35);
+composer.addPass(bloom);
+
+/* ============================================================
+ *  2. 背景（网格 / 粒子，常开）
+ * ========================================================== */
+const bgGroup = new THREE.Group(); scene.add(bgGroup);
+const grid = new THREE.GridHelper(70, 70, 0x1a4a66, 0x0e2a3d);
+grid.position.y = DV.yH - 0.02;
+grid.material.transparent = true; grid.material.opacity = 0.5;
+bgGroup.add(grid);
+const pCount = 700, pPos = new Float32Array(pCount*3);
+for(let i=0;i<pCount;i++){
+  pPos[i*3]   = (Math.random()-0.5)*70;
+  pPos[i*3+1] = Math.random()*34 - 4;
+  pPos[i*3+2] = (Math.random()-0.5)*70;
+}
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+bgGroup.add(new THREE.Points(pGeo, new THREE.PointsMaterial({ color:0x6fd8ff, size:0.09, transparent:true, opacity:0.5, blending:THREE.AdditiveBlending, depthWrite:false })));
+
+/* ============================================================
+ *  3. 工具函数
+ * ========================================================== */
+function lineMat(color, opacity=1, dash=false){
+  if(dash) return new THREE.LineDashedMaterial({ color, transparent:true, opacity, dashSize:0.3, gapSize:0.2, depthWrite:false });
+  return new THREE.LineBasicMaterial({ color, transparent:true, opacity });
+}
+function makeLine(points, color, opacity=1, dash=false){
+  const g = new THREE.BufferGeometry().setFromPoints(points);
+  const l = new THREE.Line(g, lineMat(color, opacity, dash));
+  if(dash) l.computeLineDistances();
+  return l;
+}
+function makeLoopLine(points, color, opacity=1, dash=false){
+  const pts = points.slice();
+  if(pts.length) pts.push(pts[0].clone());
+  return makeLine(pts, color, opacity, dash);
+}
+function makeClosed(points, color, opacity, dash){
+  const g = new THREE.BufferGeometry().setFromPoints(points);
+  const l = new THREE.LineLoop(g, lineMat(color, opacity, dash));
+  if(dash) l.computeLineDistances();
+  return l;
+}
+function disposeObj(o){
+  o.traverse(c=>{ if(c.geometry) c.geometry.dispose(); if(c.material){ (Array.isArray(c.material)?c.material:[c.material]).forEach(m=>{ if(m.map) m.map.dispose(); m.dispose(); }); } });
+}
+function clearGroup(g){ while(g.children.length){ const c=g.children.pop(); disposeObj(c); } }
+
+function makeLabel(text, color, scale=1){
+  const fs = 64, pad = 26;
+  const c = document.createElement('canvas');
+  const ctx = c.getContext('2d');
+  ctx.font = `700 ${fs}px "PingFang SC","Microsoft YaHei",sans-serif`;
+  const w = Math.ceil(ctx.measureText(text).width) + pad*2;
+  c.width = w; c.height = fs + pad*2;
+  const g = c.getContext('2d');
+  g.font = `700 ${fs}px "PingFang SC","Microsoft YaHei",sans-serif`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.shadowColor = color; g.shadowBlur = 22; g.fillStyle = color;
+  g.fillText(text, c.width/2, c.height/2);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false, depthTest:false }));
+  const k = 0.021*scale;
+  sp.scale.set(c.width*k, c.height*k, 1);
+  return sp;
+}
+function hex(c){ return '#' + c.toString(16).padStart(6,'0'); }
+
+/* 二维凸包（Andrew 单调链） */
+function convexHull(pts){
+  const p = pts.map(v=>v.clone()).sort((a,b)=> a.x===b.x ? a.y-b.y : a.x-b.x);
+  const uniq = [];
+  for(const q of p){ if(!uniq.length || Math.abs(q.x-uniq[uniq.length-1].x)>1e-6 || Math.abs(q.y-uniq[uniq.length-1].y)>1e-6) uniq.push(q); }
+  if(uniq.length < 3) return uniq;
+  const cross=(o,a,b)=> (a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x);
+  const lower=[];
+  for(const q of uniq){ while(lower.length>=2 && cross(lower[lower.length-2],lower[lower.length-1],q)<=0) lower.pop(); lower.push(q); }
+  const upper=[];
+  for(let i=uniq.length-1;i>=0;i--){ const q=uniq[i]; while(upper.length>=2 && cross(upper[upper.length-2],upper[upper.length-1],q)<=0) upper.pop(); upper.push(q); }
+  lower.pop(); upper.pop();
+  return lower.concat(upper);
+}
+/* 点 p 是否落在线段 ab 上（容差 eps） */
+function pointOnSeg(p, a, b, eps=1e-3){
+  const abx=b.x-a.x, aby=b.y-a.y;
+  const apx=p.x-a.x, apy=p.y-a.y;
+  const len = Math.hypot(abx, aby);
+  if(len < 1e-9) return Math.hypot(apx, apy) < eps;
+  if(Math.abs(abx*apy - aby*apx)/len > eps) return false;
+  const t = (apx*abx + apy*aby)/(len*len);
+  return t > -eps && t < 1+eps;
+}
+function pointInPoly(p, poly){
+  let inside = false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const xi=poly[i].x, yi=poly[i].y, xj=poly[j].x, yj=poly[j].y;
+    if(((yi>p.y)!==(yj>p.y)) && (p.x < (xj-xi)*(p.y-yi)/(yj-yi)+xi)) inside = !inside;
+  }
+  return inside;
+}
+function circlePts(y, r, n=64){
+  const pts = [];
+  for(let i=0;i<n;i++){ const t = i/n*Math.PI*2; pts.push(new THREE.Vector3(r*Math.cos(t), y, r*Math.sin(t))); }
+  return pts;
+}
+function greatCircle(center, r, plane, n=72){
+  const pts = [];
+  for(let i=0;i<n;i++){
+    const t = i/n*Math.PI*2, c = Math.cos(t), s = Math.sin(t);
+    if(plane==='xy') pts.push(new THREE.Vector3(center.x+r*c, center.y+r*s, center.z));
+    else if(plane==='zy') pts.push(new THREE.Vector3(center.x, center.y+r*c, center.z+r*s));
+    else pts.push(new THREE.Vector3(center.x+r*c, center.y, center.z+r*s));
+  }
+  return pts;
+}
+
+/* ============================================================
+ *  4. 形体（棱柱 / 圆柱 / 圆锥 / 球）—— 描述符 + 动态重建
+ *  描述符 D：
+ *    faces      可点选的面 Mesh
+ *    pickLines  可点选的线（Line/LineLoop，userData.seg 存在时为直线段）
+ *    verts      离散局部顶点
+ *    dots       可能投影到视图内部的点（如锥顶）
+ *    loops      闭合曲线 {pts, norm(p)->Vector3|Vector3[]}
+ *    allPoints  包围盒/投影用全部采样点
+ *    rayPoints(localDir) 光线穿过的局部点
+ *    prism 专用：edges / edgeFaces / faces3 / verts（三角形面顶点表）
+ * ========================================================== */
+const prismGroup = new THREE.Group();          // 整体姿态（tilt + 平移）
+const yawGroup   = new THREE.Group();          // 绕竖轴旋转
+prismGroup.add(yawGroup);
+scene.add(prismGroup);
+const solidHolder = new THREE.Group(); yawGroup.add(solidHolder);
+const xrayHolder = new THREE.Group(); yawGroup.add(xrayHolder);
+
+/* 三棱柱面/棱表 */
+const PRISM_FACES = [
+  [0,2,1], [3,4,5],
+  [0,1,4,3], [1,2,5,4], [2,0,3,5]
+];
+const PRISM_EDGE_FACES = [
+  [0,2],[0,3],[0,4],
+  [1,2],[1,3],[1,4],
+  [2,4],[2,3],[3,4]
+];
+const PRISM_EDGES = [[0,1],[1,2],[2,0],[3,4],[4,5],[5,3],[0,3],[1,4],[2,5]];
+const PRISM_EDGE_NAMES = ['底棱','底棱','底棱','顶棱','顶棱','顶棱','侧棱','侧棱','侧棱'];
+const FACE_NAMES = ['底面（正三角形）','顶面（正三角形）','侧面','侧面','侧面'];
+
+function solidMaterial(){
+  return new THREE.MeshStandardMaterial({
+    color: COL.solid, metalness:0.35, roughness:0.42,
+    transparent:true, opacity:0.9, side:THREE.DoubleSide,
+    emissive: COL.solidEm, emissiveIntensity:0.18, depthWrite:true
+  });
+}
+function addFace(name, geometry){
+  const m = new THREE.Mesh(geometry, solidMaterial());
+  m.userData.name = name;
+  solidHolder.add(m);
+  return m;
+}
+function makePickLine(pts, closed, name, seg, opacity){
+  const op = opacity || 0.95;
+  const l = closed ? makeClosed(pts, COL.edge, op, false)
+                   : makeLine(pts, COL.edge, op, false);
+  l.userData.name = name;
+  l.userData.base = COL.edge;
+  if(seg) l.userData.seg = seg;
+  solidHolder.add(l);
+  return l;
+}
+
+const SOLIDS = {
+  /* ---------- 正三棱柱 ---------- */
+  prism:{
+    params:[
+      { id:'a', label:'底面边长 a', min:1.5, max:8, step:0.1, fmt:v=>v.toFixed(1) },
+      { id:'h', label:'棱柱高 h',   min:1,   max:9, step:0.1, fmt:v=>v.toFixed(1) }
+    ],
+    build(){
+      const a = S.a, h = S.h;
+      const r0 = a/(2*Math.sqrt(3)), R = 2*r0;
+      const base = [ new THREE.Vector3(-a/2,0,r0), new THREE.Vector3(a/2,0,r0), new THREE.Vector3(0,0,-R) ];
+      const verts = base.concat(base.map(v=> new THREE.Vector3(v.x,h,v.z)));
+
+      // 5 个面（四边形拆两个三角形）
+      const FACE_TRIS = [
+        [[0,1,2]], [[3,4,5]],
+        [[0,3,4],[0,4,1]], [[1,4,5],[1,5,2]], [[2,5,3],[2,3,0]]
+      ];
+      const faces = FACE_TRIS.map((tris,fi)=>{
+        const idx = []; tris.forEach(t=> idx.push(t[0],t[1],t[2]));
+        const pos = new Float32Array(idx.length*3);
+        idx.forEach((vi,n)=>{ pos[n*3]=verts[vi].x; pos[n*3+1]=verts[vi].y; pos[n*3+2]=verts[vi].z; });
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+        g.computeVertexNormals();
+        return addFace(FACE_NAMES[fi], g);
+      });
+      // 9 条棱（独立 Line，便于点选）
+      const pickLines = PRISM_EDGES.map(([i,j],e)=>
+        makePickLine([verts[i].clone(), verts[j].clone()], false, PRISM_EDGE_NAMES[e], [i,j]));
+
+      // 光线候选：6 个顶点 + 9 条棱中点（是否为轮廓切点由 buildRays 统一筛选）
+      const raySet = verts.slice();
+      PRISM_EDGES.forEach(([i,j])=> raySet.push(verts[i].clone().lerp(verts[j],0.5)));
+
+      return {
+        kind:'prism', faces, pickLines, verts, dots:[], loops:[], allPoints:verts.slice(),
+        edges:PRISM_EDGES, edgeFaces:PRISM_EDGE_FACES, faces3:PRISM_FACES,
+        rayPoints:()=>raySet
+      };
+    }
+  },
+
+  /* ---------- 圆柱 ---------- */
+  cylinder:{
+    params:[
+      { id:'r', label:'底面半径 r', min:1, max:4, step:0.05, fmt:v=>v.toFixed(2) },
+      { id:'h', label:'圆柱高 h',  min:1, max:9, step:0.1,  fmt:v=>v.toFixed(1) }
+    ],
+    build(){
+      const r = S.r, h = S.h;
+      const side = new THREE.CylinderGeometry(r, r, h, 64, 1, true);
+      side.translate(0, h/2, 0);
+      const top = new THREE.CircleGeometry(r, 64); top.rotateX(-Math.PI/2); top.translate(0, h, 0);
+      const bot = new THREE.CircleGeometry(r, 64); bot.rotateX( Math.PI/2);
+      const faces = [ addFace('侧面', side), addFace('上底面', top), addFace('下底面', bot) ];
+
+      const rimT = circlePts(h, r), rimB = circlePts(0, r);
+      const loops = [
+        { pts:rimT, norm:p=> [ new THREE.Vector3(p.x/r,0,p.z/r).normalize(), new THREE.Vector3(0,1,0) ] },
+        { pts:rimB, norm:p=> [ new THREE.Vector3(p.x/r,0,p.z/r).normalize(), new THREE.Vector3(0,-1,0) ] }
+      ];
+      const pickLines = [
+        makePickLine(rimT, true, '上底圆'),
+        makePickLine(rimB, true, '下底圆')
+      ];
+      const verts = [ new THREE.Vector3(0,h,0), new THREE.Vector3(0,0,0) ];
+      const rimCand = [];
+      loops.forEach(lp=>{
+        for(let i=0;i<20;i++) rimCand.push(lp.pts[Math.round(i/20*lp.pts.length) % lp.pts.length].clone());
+      });
+      return { kind:'cylinder', faces, pickLines, verts, dots:[], loops, allPoints:rimT.concat(rimB),
+        rayPoints:()=>rimCand };
+    }
+  },
+
+  /* ---------- 圆锥 ---------- */
+  cone:{
+    params:[
+      { id:'r', label:'底面半径 r', min:1, max:4, step:0.05, fmt:v=>v.toFixed(2) },
+      { id:'h', label:'圆锥高 h',  min:1, max:9, step:0.1,  fmt:v=>v.toFixed(1) }
+    ],
+    build(){
+      const r = S.r, h = S.h;
+      const side = new THREE.ConeGeometry(r, h, 64, 1, true);
+      side.translate(0, h/2, 0);
+      const bot = new THREE.CircleGeometry(r, 64); bot.rotateX(Math.PI/2);
+      const faces = [ addFace('侧面', side), addFace('底面', bot) ];
+
+      const rim = circlePts(0, r);
+      const sinB = r/Math.hypot(r,h), cosB = h/Math.hypot(r,h);
+      const loops = [{
+        pts:rim,
+        norm:p=> [ new THREE.Vector3(p.x/r*cosB, sinB, p.z/r*cosB).normalize(), new THREE.Vector3(0,-1,0) ]
+      }];
+      const pickLines = [ makePickLine(rim, true, '底圆') ];
+      const apex = new THREE.Vector3(0,h,0), center = new THREE.Vector3(0,0,0);
+      const rimCand = [];
+      for(let i=0;i<20;i++) rimCand.push(loops[0].pts[Math.round(i/20*loops[0].pts.length) % loops[0].pts.length].clone());
+      rimCand.push(apex);
+      return { kind:'cone', faces, pickLines, verts:[apex, center], dots:[apex], loops,
+        allPoints:rim.concat([apex]), rayPoints:()=>rimCand };
+    }
+  },
+
+  /* ---------- 球 ---------- */
+  sphere:{
+    params:[
+      { id:'r', label:'球半径 r', min:1.5, max:5, step:0.05, fmt:v=>v.toFixed(2) }
+    ],
+    build(){
+      const r = S.r;
+      const g = new THREE.SphereGeometry(r, 64, 40);
+      g.translate(0, r, 0);
+      const faces = [ addFace('球面', g) ];
+      const c = new THREE.Vector3(0,r,0);
+      const loops = [
+        { pts:greatCircle(c,r,'xy'), norm:p=> [ p.clone().sub(c).normalize() ] },
+        { pts:greatCircle(c,r,'zy'), norm:p=> [ p.clone().sub(c).normalize() ] },
+        { pts:greatCircle(c,r,'xz'), norm:p=> [ p.clone().sub(c).normalize() ] }
+      ];
+      const pickLines = loops.map((lp,i)=> makePickLine(lp.pts, true, ['经线','经线','赤道'][i], null, 0.55));
+      return {
+        kind:'sphere', faces, pickLines, verts:[], dots:[], loops, noProjLoops:true,
+        sphereCircle:{ center:c, r },
+        allPoints: loops[0].pts.concat(loops[1].pts, loops[2].pts),
+        rayPoints:(dirLocal)=>{
+          // 仅保留轮廓大圆上的光线
+          const up = Math.abs(dirLocal.y) > 0.9 ? new THREE.Vector3(1,0,0) : new THREE.Vector3(0,1,0);
+          const t1 = new THREE.Vector3().crossVectors(dirLocal, up).normalize();
+          const t2 = new THREE.Vector3().crossVectors(dirLocal, t1).normalize();
+          const out = [];   // 只取轮廓大圆：光线与球相切，不会穿过球体
+          const N = 20;
+          for(let i=0;i<N;i++){
+            const a = i/N*Math.PI*2;
+            out.push(c.clone().addScaledVector(t1, r*Math.cos(a)).addScaledVector(t2, r*Math.sin(a)));
+          }
+          return out;
+        }
+      };
+    }
+  }
+};
+
+let D = null;
+
+/* 绕竖轴旋转（“顶点朝前/朝后”只是该角度的快捷方式） */
+function applyPoseRotations(){
+  prismGroup.rotation.set(0, 0, 0);
+  yawGroup.rotation.set(0, A.yaw*Math.PI/180, 0);
+}
+function layoutSolid(){
+  applyPoseRotations();
+  prismGroup.position.set(0,0,0);
+  prismGroup.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  D.allPoints.forEach(p=> box.expandByPoint(p.clone().applyMatrix4(yawGroup.matrixWorld)));
+  const c = box.getCenter(new THREE.Vector3());
+  // 包围盒中心置于 (0,5,0)：形体在 V/H/W 三个 12×12 面上的投影都恰好居中，
+  // 且光线沿轮廓切点直达投影图形，保持几何一致
+  prismGroup.position.set(-c.x, DV.yH + DV.L/2 - c.y, -c.z);
+  prismGroup.updateMatrixWorld(true);
+}
+function applyFaceBaseline(){
+  const op = S.xray ? 0.10 : 0.9;
+  D.faces.forEach(m=>{
+    m.material.color.setHex(COL.solid);
+    m.material.emissive.setHex(COL.solidEm);
+    m.material.emissiveIntensity = S.xray ? 0.05 : 0.18;
+    m.material.opacity = op;
+    m.material.depthWrite = !S.xray;
+  });
+  // 球：非透视时由实体上的大圆线表现；透视时三个大圆统一在透视层绘制（前实后虚）
+  if(D.kind === 'sphere') D.pickLines.forEach(l=>{ l.visible = !S.xray; });
+}
+function rebuildSolid(){
+  clearSelection(true);
+  clearGroup(solidHolder);
+  clearGroup(xrayHolder);
+  D = SOLIDS[S.solid].build();
+  layoutSolid();
+  applyFaceBaseline();
+  hiddenDirty = true;
+}
+const _wv = new THREE.Vector3();
+function worldPoint(p){ return p.clone().applyMatrix4(yawGroup.matrixWorld); }
+function viewerLocal(worldDir){
+  yawGroup.getWorldQuaternion(_q).invert();
+  return worldDir.clone().applyQuaternion(_q);
+}
+const _q = new THREE.Quaternion();
+
+/* ---- 点选高亮 ---- */
+let selFace = null, selLine = null;
+const AXIS_Y = new THREE.Vector3(0,1,0);
+const selTube = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.08, 0.08, 1, 16, 1, true),
+  new THREE.MeshBasicMaterial({ color:COL.hi, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false })
+);
+selTube.visible = false;
+yawGroup.add(selTube);
+
+function clearSelection(silent){
+  if(selFace) applyFaceBaseline();
+  if(selLine) selLine.material.color.setHex(selLine.userData.base);
+  selFace = null; selLine = null;
+  selTube.visible = false;
+  if(!silent) updateButtons();
+}
+function selectFace(m){
+  if(selFace === m){ clearSelection(); return; }
+  clearSelection(true);
+  selFace = m;
+  m.material.color.setHex(COL.hi);
+  m.material.emissive.setHex(COL.hi);
+  m.material.emissiveIntensity = 0.35;
+  m.material.opacity = 0.97;
+  updateButtons();
+}
+function selectLine(l){
+  if(selLine === l){ clearSelection(); return; }
+  clearSelection(true);
+  selLine = l;
+  l.material.color.setHex(COL.hi);
+  if(l.userData.seg){
+    const e = l.userData.seg;
+    const a = D.verts[e[0]], b = D.verts[e[1]];
+    const dir = b.clone().sub(a), len = dir.length();
+    selTube.position.copy(a).add(b).multiplyScalar(0.5);
+    selTube.scale.set(1, len, 1);
+    selTube.quaternion.setFromUnitVectors(AXIS_Y, dir.normalize());
+    selTube.visible = true;
+  }
+  updateButtons();
+}
+
+/* ============================================================
+ *  5. 三个投影面（三色半透明）
+ * ========================================================== */
+const vGroup = new THREE.Group(); scene.add(vGroup);
+const hPivot = new THREE.Group(); hPivot.position.set(0, DV.yH, DV.zV); scene.add(hPivot);
+const wPivot = new THREE.Group(); wPivot.position.set(DV.xW, 0, DV.zV); scene.add(wPivot);
+
+function buildPlane(w, h, color){
+  const grp = new THREE.Group();
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, h),
+    new THREE.MeshBasicMaterial({ color, transparent:true, opacity:0.16, side:THREE.DoubleSide, depthWrite:false })
+  );
+  grp.add(mesh);
+  const hw = w/2, hh = h/2;
+  grp.add(makeLoopLine([
+    new THREE.Vector3(-hw,-hh,0), new THREE.Vector3(hw,-hh,0),
+    new THREE.Vector3(hw,hh,0), new THREE.Vector3(-hw,hh,0)
+  ], color, 0.6));
+  const gp = [];
+  for(let x=-hw+1; x<hw; x+=1){ gp.push(new THREE.Vector3(x,-hh,0), new THREE.Vector3(x,hh,0)); }
+  for(let y=-hh+1; y<hh; y+=1){ gp.push(new THREE.Vector3(-hw,y,0), new THREE.Vector3(hw,y,0)); }
+  const gl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(gp), lineMat(color, 0.12));
+  grp.add(gl);
+  return grp;
+}
+function buildPlanes(){
+  const vp = buildPlane(DV.vW, DV.vH, VIEW_COLORS.V);
+  vp.position.set(0, DV.yH + DV.vH/2, DV.zV);
+  vGroup.add(vp);
+  const hp = buildPlane(DV.vW, DV.hD, VIEW_COLORS.H);
+  hp.rotation.x = -Math.PI/2;
+  hp.position.set(0, 0, DV.hD/2);
+  hPivot.add(hp);
+  const wp = buildPlane(DV.wD, DV.vH, VIEW_COLORS.W);
+  wp.rotation.y = Math.PI/2;
+  wp.position.set(0, DV.yH + DV.vH/2, DV.wD/2);
+  wPivot.add(wp);
+}
+
+/* ============================================================
+ *  6. 投影（三视图轮廓 / 可见棱线 / 被遮挡虚线 / 顶点）
+ * ========================================================== */
+const projRoot = { V:new THREE.Group(), H:new THREE.Group(), W:new THREE.Group() };
+vGroup.add(projRoot.V); hPivot.add(projRoot.H); wPivot.add(projRoot.W);
+
+const VIEW_DIR = {
+  V: new THREE.Vector3(0,0,1),
+  H: new THREE.Vector3(0,1,0),
+  W: new THREE.Vector3(-1,0,0)
+};
+const _shift = new THREE.Vector2();
+/* 各视图投影为居中而做的世界坐标平移（光线端点需同步，保证光线仍指向投影图形） */
+const VIEW_SHIFTS = { V:new THREE.Vector3(), H:new THREE.Vector3(), W:new THREE.Vector3() };
+
+function prismFaceNormalsWorld(wv){
+  const center = new THREE.Vector3();
+  wv.forEach(p=> center.add(p)); center.multiplyScalar(1/wv.length);
+  return D.faces3.map(v=>{
+    const n = new THREE.Vector3().subVectors(wv[v[1]], wv[v[0]])
+              .cross(new THREE.Vector3().subVectors(wv[v[2]], wv[v[0]])).normalize();
+    const c = new THREE.Vector3();
+    v.forEach(k=> c.add(wv[k])); c.multiplyScalar(1/v.length);
+    if(n.dot(new THREE.Vector3().subVectors(c, center)) < 0) n.negate();
+    return n;
+  });
+}
+/* 曲线点在某观察方向下是否可见（norm 可返回多个外法向） */
+function loopPointVisible(loop, p, vLocal){
+  const ns = loop.norm(p);
+  return (Array.isArray(ns) ? ns : [ns]).some(n=> n.dot(vLocal) > 1e-3);
+}
+
+function buildProjections(){
+  // 局部 → 世界
+  const worldVerts = D.verts.map(worldPoint);
+  const loopWorld = D.loops.map(lp=> lp.pts.map(worldPoint));
+  const worldDots = D.dots.map(worldPoint);
+  const allWorld = worldVerts.concat(...loopWorld);
+
+  const cy = DV.yH + DV.L/2;        // 竖立面（V/W）投影中心高度
+  const defs = {
+    V: { pts:p=>[p.x,p.y], center:[0,cy], to3:(u,v)=> new THREE.Vector3(u, v, DV.zV) },
+    H: { pts:p=>[p.x,p.z], center:[0,0],  to3:(u,v)=> new THREE.Vector3(u, 0, v - DV.zV) },
+    W: { pts:p=>[p.z,p.y], center:[0,cy], to3:(u,v)=> new THREE.Vector3(0, v, u - DV.zV) }
+  };
+  // 计算各视图居中偏移（同时供光线端点使用）
+  for(const view of ['V','H','W']){
+    const def = defs[view];
+    let bx0=Infinity,bx1=-Infinity,by0=Infinity,by1=-Infinity;
+    allWorld.forEach(p=>{
+      const q = def.pts(p);
+      if(q[0]<bx0)bx0=q[0]; if(q[0]>bx1)bx1=q[0];
+      if(q[1]<by0)by0=q[1]; if(q[1]>by1)by1=q[1];
+    });
+    const shX = def.center[0] - (bx0+bx1)/2;
+    const shY = def.center[1] - (by0+by1)/2;
+    def.shift = [shX, shY];
+    if(view==='V') VIEW_SHIFTS.V.set(shX, shY, 0);
+    else if(view==='H') VIEW_SHIFTS.H.set(shX, 0, shY);
+    else VIEW_SHIFTS.W.set(0, shY, shX);
+  }
+  for(const view of ['V','H','W']) buildOneView(view, defs[view], worldVerts, loopWorld, worldDots, allWorld);
+}
+
+function buildOneView(view, def, worldVerts, loopWorld, worldDots, allWorld){
+  const g = projRoot[view];
+  clearGroup(g);
+  const col = VIEW_COLORS[view];
+  const raw2 = p=> new THREE.Vector2(def.pts(p)[0], def.pts(p)[1]);
+  const to2 = p=> raw2(p).add(_shift.set(def.shift[0], def.shift[1]));
+
+  // 轮廓（球：任何方向下投影都是精确圆，直接按圆心+半径生成，避免采样凸包失真）
+  let hull;
+  if(D.kind === 'sphere'){
+    const cc = to2(worldPoint(D.sphereCircle.center));
+    const rr = D.sphereCircle.r, N = 80;
+    hull = [];
+    for(let i=0;i<N;i++){ const t=i/N*Math.PI*2; hull.push(new THREE.Vector2(cc.x+rr*Math.cos(t), cc.y+rr*Math.sin(t))); }
+  } else {
+    hull = convexHull(allWorld.map(to2));
+  }
+  g.add(makeLoopLine(hull.map(p=> def.to3(p.x,p.y)), col, 0.95));
+
+  const visSegs2 = [];   // 可见线段（二维，用于虚线去重）
+  const vis3 = [];
+  const hid3 = [];
+
+  // —— 棱柱直棱 ——
+  if(D.kind === 'prism'){
+    const viewer = VIEW_DIR[view];
+    const faceFront = prismFaceNormalsWorld(worldVerts).map(n=> n.dot(viewer) > 1e-4);
+    D.edges.forEach(([i,j],e)=>{
+      const p1 = to2(worldVerts[i]), p2 = to2(worldVerts[j]);
+      if(Math.hypot(p1.x-p2.x,p1.y-p2.y) < 1e-4) return;
+      const [fa,fb] = D.edgeFaces[e];
+      const hidden = !(faceFront[fa] || faceFront[fb]);
+      if(hidden) hid3.push({a:p1,b:p2});
+      else { vis3.push({a:p1,b:p2}); visSegs2.push({a:p1,b:p2}); }
+    });
+  }
+
+  // —— 闭合曲线（圆等）：按法向拆分可见/被遮挡段 ——
+  // 球的三个大圆仅用于 3D 透视，三视图中保持干净的圆
+  const vLocal = viewerLocal(VIEW_DIR[view]);
+  if(!D.noProjLoops) D.loops.forEach((lp,li)=>{
+    const wp = loopWorld[li], n = wp.length;
+    const vis = lp.pts.map((p,i)=> loopPointVisible(lp, p, vLocal));
+    for(let i=0;i<n;i++){
+      const j = (i+1)%n;
+      const a = to2(wp[i]), b = to2(wp[j]);
+      if(Math.hypot(a.x-b.x,a.y-b.y) < 1e-4) continue;
+      if(vis[i] && vis[j]){ vis3.push({a,b}); visSegs2.push({a,b}); }
+      else if(!vis[i] && !vis[j]){ hid3.push({a,b}); }
+      else { vis3.push({a,b}); visSegs2.push({a,b}); }   // 轮廓边界按可见绘制
+    }
+  });
+
+  // 可见线
+  if(vis3.length){
+    const pts = [];
+    vis3.forEach(s=> pts.push(def.to3(s.a.x,s.a.y), def.to3(s.b.x,s.b.y)));
+    g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), lineMat(col, 0.75)));
+  }
+  // 被遮挡虚线（仅透视模式；与可见线重合者省略）
+  if(S.xray){
+    const pts = [];
+    hid3.forEach(s=>{
+      const mid = s.a.clone().lerp(s.b,0.5);
+      if(visSegs2.some(v=> pointOnSeg(mid, v.a, v.b))) return;
+      pts.push(def.to3(s.a.x,s.a.y), def.to3(s.b.x,s.b.y));
+    });
+    if(pts.length){
+      const l = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), lineMat(col, 0.8, true));
+      l.computeLineDistances();
+      g.add(l);
+    }
+  }
+
+  // 内部顶点投影点（如锥顶在俯视图中）
+  const dots = worldDots.map(to2).filter(p=> pointInPoly(p, hull));
+  if(dots.length){
+    const pts = dots.map(p=> def.to3(p.x,p.y));
+    g.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.PointsMaterial({ color:0xffffff, size:0.34, transparent:true, opacity:0.95, depthWrite:false, blending:THREE.AdditiveBlending })));
+  }
+}
+
+/* ============================================================
+ *  7. 打光：三方向、仅穿过顶点/边/轮廓点，带方向箭头
+ * ========================================================== */
+const rayGroup = new THREE.Group(); scene.add(rayGroup);
+const RAY_DIRS = {
+  F: { world:new THREE.Vector3(0,0,-1),  name:'前方光' },
+  T: { world:new THREE.Vector3(0,-1,0),  name:'上方光' },
+  S: { world:new THREE.Vector3(1,0,0),   name:'侧方光' }
+};
+let rayBuilt = { F:null, T:null, S:null };
+const arrowGeo = new THREE.ConeGeometry(0.16, 0.55, 14);
+const rayTubeGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
+const RAY_TUBE_R = 0.06;
+/* 发光圆点纹理（光子） */
+function makeGlowTexture(){
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32,32,0,32,32,32);
+  grd.addColorStop(0,'rgba(255,255,255,1)');
+  grd.addColorStop(0.35,'rgba(200,242,255,.95)');
+  grd.addColorStop(1,'rgba(120,220,255,0)');
+  g.fillStyle = grd; g.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+const glowTex = makeGlowTexture();
+
+function dedupePoints(points, dir){
+  // 按垂直于光线方向的投影去重
+  const up = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1,0,0) : new THREE.Vector3(0,1,0);
+  const t1 = new THREE.Vector3().crossVectors(dir, up).normalize();
+  const t2 = new THREE.Vector3().crossVectors(dir, t1).normalize();
+  const map = new Map();
+  points.forEach(p=>{
+    const k = Math.round(p.dot(t1)*20)/20 + '|' + Math.round(p.dot(t2)*20)/20;
+    if(!map.has(k)) map.set(k, p);
+  });
+  return [...map.values()];
+}
+function rayEndpoints(dirKey, p){
+  // 端点随对应投影面的居中偏移整体平移，光线方向保持不变
+  const sh = dirKey==='F' ? VIEW_SHIFTS.V : dirKey==='T' ? VIEW_SHIFTS.H : VIEW_SHIFTS.W;
+  if(dirKey==='F') return [ new THREE.Vector3(p.x+sh.x,p.y+sh.y,p.z+8),  new THREE.Vector3(p.x+sh.x,p.y+sh.y,DV.zV) ];
+  if(dirKey==='T') return [ new THREE.Vector3(p.x+sh.x,p.y+8,p.z+sh.z),  new THREE.Vector3(p.x+sh.x,DV.yH,p.z+sh.z) ];
+  return [ new THREE.Vector3(p.x-8,p.y+sh.y,p.z+sh.z), new THREE.Vector3(DV.xW,p.y+sh.y,p.z+sh.z) ];
+}
+/* 轮廓切点筛选：从光源侧与投影面侧分别对形体发射射线，
+   只有两侧都“最先在 p 附近相遇（或完全错过）”的点才是光线轮廓点，
+   这样光线只会擦过形体，不会穿入再从背面穿出。 */
+const _silRC = new THREE.Raycaster();
+const _silO = new THREE.Vector3();
+function silhouetteWorld(points, dirWorld){
+  const d = dirWorld.clone().normalize(), TOL = 0.12;
+  return points.filter(p=>{
+    _silO.copy(p).addScaledVector(d, 8);
+    _silRC.set(_silO, d.clone().negate());
+    const h1 = _silRC.intersectObjects(D.faces, false)[0];
+    if(h1 && h1.distance < 8 - TOL) return false;
+    _silO.copy(p).addScaledVector(d, -8);
+    _silRC.set(_silO, d);
+    const h2 = _silRC.intersectObjects(D.faces, false)[0];
+    if(h2 && h2.distance < 8 - TOL) return false;
+    return true;
+  });
+}
+function buildRays(){
+  for(const k of ['F','T','S']){
+    if(rayBuilt[k]){ rayGroup.remove(rayBuilt[k].root); clearGroup(rayBuilt[k].root); rayBuilt[k]=null; }
+    const localDir = viewerLocal(RAY_DIRS[k].world);
+    const cand = silhouetteWorld(D.rayPoints(localDir).map(worldPoint), RAY_DIRS[k].world);
+    const targetsWorld = dedupePoints(cand, RAY_DIRS[k].world);
+
+    const root = new THREE.Group();
+    const photons = [];
+    targetsWorld.forEach(p=>{
+      const [s,e] = rayEndpoints(k, p);
+      photons.push({s,e});
+    });
+
+    // 光束（细圆柱，保证任意平台都有可见粗细）
+    const nRay = Math.max(1, photons.length);
+    const tubes = new THREE.InstancedMesh(rayTubeGeo,
+      new THREE.MeshBasicMaterial({ color:COL.ray, transparent:true, opacity:0.62, blending:THREE.AdditiveBlending, depthWrite:false }),
+      nRay);
+    tubes.material.userData.baseOp = 0.62;
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), mid = new THREE.Vector3();
+    const scTube = new THREE.Vector3(), scArrow = new THREE.Vector3(1.4,1.4,1.4);
+    q.setFromUnitVectors(AXIS_Y, RAY_DIRS[k].world);
+    photons.forEach((ph,i)=>{
+      const len = ph.s.distanceTo(ph.e);
+      mid.copy(ph.s).add(ph.e).multiplyScalar(0.5);
+      scTube.set(RAY_TUBE_R, len, RAY_TUBE_R);
+      m4.compose(mid, q, scTube); tubes.setMatrixAt(i, m4);
+    });
+    tubes.instanceMatrix.needsUpdate = true;
+    root.add(tubes);
+
+    // 方向箭头（每条光线一个，靠近光源一端，指向投影面）
+    const arrows = new THREE.InstancedMesh(arrowGeo,
+      new THREE.MeshBasicMaterial({ color:COL.arrow, transparent:true, opacity:0.95, blending:THREE.AdditiveBlending, depthWrite:false }),
+      nRay);
+    arrows.material.userData.baseOp = 0.95;
+    photons.forEach((ph,i)=>{
+      mid.copy(ph.s).lerp(ph.e, 0.22);  // 靠近光源，强化“光射向投影面”的方向
+      m4.compose(mid, q, scArrow); arrows.setMatrixAt(i, m4);
+    });
+    arrows.instanceMatrix.needsUpdate = true;
+    root.add(arrows);
+
+    // 流动光子（大号发光圆点）
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nRay*3), 3));
+    const pts = new THREE.Points(pg, new THREE.PointsMaterial({
+      color:0xffffff, map:glowTex, size:0.85, transparent:true, opacity:1,
+      depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true
+    }));
+    pts.material.userData.baseOp = 1;
+    pts.userData.photons = photons;
+    pts.userData.offsets = photons.map(()=>Math.random());
+    root.add(pts);
+
+    rayGroup.add(root);
+    rayBuilt[k] = { root, pts };
+  }
+}
+function updateRays(dt){
+  const fade = 1 - 0.95*A.unfold;
+  for(const k of ['F','T','S']){
+    const b = rayBuilt[k]; if(!b) continue;
+    const on = S[k==='F'?'rayF':k==='T'?'rayT':'rayS'] && fade > 0.03;
+    b.root.visible = on;
+    if(!on) continue;
+    b.root.traverse(o=>{
+      if(o.material && o.material.userData.baseOp !== undefined) o.material.opacity = o.material.userData.baseOp * fade;
+    });
+    const pts = b.pts, pos = pts.geometry.attributes.position;
+    const phs = pts.userData.photons, offs = pts.userData.offsets;
+    for(let i=0;i<phs.length;i++){
+      offs[i] = (offs[i] + dt*0.38) % 1;
+      const ph = phs[i], t = offs[i];
+      pos.setXYZ(i,
+        ph.s.x+(ph.e.x-ph.s.x)*t,
+        ph.s.y+(ph.e.y-ph.s.y)*t,
+        ph.s.z+(ph.e.z-ph.s.z)*t);
+    }
+    pos.needsUpdate = true;
+  }
+}
+
+/* ============================================================
+ *  8. 展开 / 折痕 / 视图标签（只显示“某视图”）
+ * ========================================================== */
+function updateUnfold(){
+  const t = THREE.MathUtils.clamp(A.unfold,0,1);
+  const e = t*t*(3-2*t);
+  hPivot.rotation.x = e*Math.PI/2;
+  wPivot.rotation.y = e*Math.PI/2;
+}
+const foldGroup = new THREE.Group(); scene.add(foldGroup);
+function buildFoldLines(){
+  clearGroup(foldGroup);
+  const c = COL.fold, hw = DV.vW/2;
+  foldGroup.add(makeLine([new THREE.Vector3(-hw,DV.yH,DV.zV), new THREE.Vector3(hw,DV.yH,DV.zV)], c, 0.9));
+  foldGroup.add(makeLine([new THREE.Vector3(DV.xW,DV.yH,DV.zV), new THREE.Vector3(DV.xW,DV.yH+DV.vH,DV.zV)], c, 0.9));
+}
+const hLabelGroup = new THREE.Group(); hPivot.add(hLabelGroup);
+const wLabelGroup = new THREE.Group(); wPivot.add(wLabelGroup);
+function buildDirLabels(){
+  clearGroup(hLabelGroup); clearGroup(wLabelGroup);
+  const l1 = makeLabel(VIEW_LABELS.V, hex(VIEW_COLORS.V), 0.9); l1.position.set(0, DV.yH+DV.vH+0.9, DV.zV); vGroup.add(l1);
+  const l2 = makeLabel(VIEW_LABELS.H, hex(VIEW_COLORS.H), 0.9); l2.position.set(0, -0.9, DV.hD*0.55); hLabelGroup.add(l2);
+  const l3 = makeLabel(VIEW_LABELS.W, hex(VIEW_COLORS.W), 0.9); l3.position.set(0.15, DV.yH+DV.vH+0.9, DV.wD*0.55); wLabelGroup.add(l3);
+}
+
+/* ============================================================
+ *  9. 透视（3D 被遮挡棱/轮廓虚线，随观察方向更新）
+ * ========================================================== */
+let hiddenDirty = false;
+let _hiddenKey = '';
+function buildHiddenLines(){
+  clearGroup(xrayHolder);
+  const camDir = new THREE.Vector3();
+  camViewDirWorld(camDir);
+  const vLocal = viewerLocal(camDir);
+
+  if(D.kind === 'prism'){
+    const wv = D.verts.map(worldPoint);
+    const faceFront = prismFaceNormalsWorld(wv).map(n=> n.dot(camDir) > 1e-3);
+    const pts = [];
+    D.edges.forEach(([i,j],e)=>{
+      const [fa,fb] = D.edgeFaces[e];
+      if(!faceFront[fa] && !faceFront[fb]) pts.push(D.verts[i].clone(), D.verts[j].clone());
+    });
+    if(pts.length){
+      const l = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), lineMat(COL.hidden, 0.85, true));
+      l.computeLineDistances();
+      xrayHolder.add(l);
+    }
+  }
+  // 曲线段：球在透视下显式画出三个完整大圆（前半实线、后半虚线）；
+  // 其余曲面只补背面虚线，前半由实体上的轮廓线承担
+  D.loops.forEach(lp=>{
+    const n = lp.pts.length, pts = lp.pts;
+    const vis = pts.map(p=> loopPointVisible(lp, p, vLocal));
+    const backPts = [], frontPts = [];
+    for(let i=0;i<n;i++){
+      const j=(i+1)%n;
+      if(!vis[i] && !vis[j]) backPts.push(pts[i].clone(), pts[j].clone());
+      else if(D.kind === 'sphere') frontPts.push(pts[i].clone(), pts[j].clone());
+    }
+    if(backPts.length){
+      const l = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(backPts), lineMat(COL.hidden, 0.8, true));
+      l.computeLineDistances();
+      xrayHolder.add(l);
+    }
+    if(frontPts.length){
+      xrayHolder.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(frontPts), lineMat(COL.edge, 0.85, false)));
+    }
+  });
+  xrayHolder.visible = S.xray;
+}
+
+/* ============================================================
+ *  10. 控制面板
+ * ========================================================== */
+const PARAM_LABEL = {
+  a:{label:'底面边长 a'}, r:{label:'底面/球半径 r'}, h:{label:'高 h'}
+};
+function panelDef(){
+  // —— 调整图形：尺寸参数 / 绕竖轴旋转（+三棱柱顶点快捷角度）——
+  const fig = SOLIDS[S.solid].params.map(p=>({ t:'range', ...p }));
+  fig.push({ t:'range', id:'yaw', label:'绕竖轴旋转 θ', min:0, max:360, step:1, fmt:v=>v.toFixed(0)+'°' });
+  if(S.solid === 'prism'){
+    fig.push({ t:'buttons', buttons:[
+      {id:'pose-front',label:'顶点朝前'},{id:'pose-back',label:'顶点朝后'} ]});
+  }
+
+  // —— 调整视角：视图 / 展开透视 / 缩放 / 自动旋转（拖动画面亦可直接旋转）——
+  const view = [
+    { t:'buttons', buttons:[{id:'focusFront',label:'正视'},{id:'focusTop',label:'俯视'},{id:'focusSide',label:'侧视'}] },
+    { t:'buttons', buttons:[{id:'toggle-unfold',label:'展开'},{id:'toggle-xray',label:'透视'}] },
+    { t:'range', id:'zoom', label:'缩放', min:0.4, max:2.6, step:0.01, fmt:v=>v.toFixed(2)+'×' },
+    { t:'toggle', id:'autoRot', label:'自动旋转' },
+    { t:'range', id:'autoSpeed', label:'旋转速度', min:0, max:2, step:0.05, fmt:v=>v.toFixed(2) }
+  ];
+
+  return [
+    { title:'调整图形', items:fig },
+    { title:'调整视角', items:view },
+    { title:'光线', items:[{ t:'buttons', buttons:[
+      {id:'toggle-rayF',label:'前方光'},{id:'toggle-rayT',label:'上方光'},{id:'toggle-rayS',label:'侧方光'} ]}]
+    }
+  ];
+}
+let CONTROLS = panelDef();
+
+function buildPanel(){
+  CONTROLS = panelDef();
+  const host = document.getElementById('panel-left');
+  host.innerHTML = '';
+  CONTROLS.forEach(grp=>{
+    const sec = document.createElement('div'); sec.className = 'sec';
+    sec.innerHTML = `<div class="sec-h">${grp.title}</div>`;
+    grp.items.forEach(it=>{
+      const row = document.createElement('div'); row.className = 'row';
+      if(it.t === 'range'){
+        row.innerHTML = `<div class="lab"><span>${it.label}</span><b id="v-${it.id}">${it.fmt(S[it.id])}</b></div>
+          <input type="range" id="c-${it.id}" min="${it.min}" max="${it.max}" step="${it.step}" value="${S[it.id]}">`;
+      } else if(it.t === 'toggle'){
+        row.innerHTML = `<label class="sw" style="display:flex;align-items:center;gap:10px;font-size:13px;padding:5px 0;cursor:pointer">
+          <input type="checkbox" id="c-${it.id}" ${S[it.id]?'checked':''} style="width:20px;height:20px">
+          <span>${it.label}</span></label>`;
+      } else if(it.t === 'buttons'){
+        row.innerHTML = `<div class="btnrow">` + it.buttons.map(b=>`<button class="btn ${b.cls||''}" type="button" id="b-${b.id}">${b.label}</button>`).join('') + `</div>`;
+      }
+      sec.appendChild(row);
+    });
+    host.appendChild(sec);
+  });
+
+  CONTROLS.forEach(grp=> grp.items.forEach(it=>{
+    if(it.t === 'range'){
+      const el = document.getElementById('c-'+it.id);
+      el.addEventListener('input', ()=>{
+        S[it.id] = parseFloat(el.value);
+        setSliderLabel(it.id, it.fmt(S[it.id]));
+      });
+    } else if(it.t === 'toggle'){
+      const el = document.getElementById('c-'+it.id);
+      el.addEventListener('change', ()=>{ S[it.id] = el.checked; if(it.id==='ortho') updateCamera(); });
+    } else if(it.t === 'buttons'){
+      it.buttons.forEach(b=>{
+        const el = document.getElementById('b-'+b.id);
+        if(el) el.addEventListener('click', ()=> buttonAction(b.id));
+      });
+    }
+  }));
+  updateButtons();
+}
+function setSliderLabel(id, txt){ const e = document.getElementById('v-'+id); if(e) e.textContent = txt; }
+function syncSliders(ids){
+  ids.forEach(id=>{
+    const el = document.getElementById('c-'+id);
+    if(el) el.value = S[id];
+    const f = CONTROLS.flatMap(g=>g.items).find(i=>i.id===id);
+    if(f && f.fmt) setSliderLabel(id, f.fmt(S[id]));
+  });
+}
+function setView(az, el, zoom, target){
+  S.az = az; S.el = el; S.zoom = zoom;
+  if(target) camState.target.copy(target);
+  syncSliders(['zoom']);
+  updateButtons();
+}
+const VIEW_BTN = { focusFront:[0,0], focusTop:[0,89.9], focusSide:[90,0] };
+function buttonAction(id){
+  if(id === 'focusFront') setView(0, 0, 1.0, new THREE.Vector3(0, DV.yH+DV.vH/2, DV.zV));
+  else if(id === 'focusTop') setView(0, 89.9, 1.0, new THREE.Vector3(0, DV.yH, DV.zV+DV.hD/2));
+  else if(id === 'focusSide') setView(90, 0, 1.0, new THREE.Vector3(DV.xW, DV.yH+DV.vH/2, DV.zV+DV.wD/2));
+  else if(id.startsWith('shape-')){
+    S.solid = id.slice(6);
+    buildPanel();
+  }
+  else if(id === 'pose-front' || id === 'pose-back'){
+    // 三棱柱专用：把“绕竖轴旋转”直接转到指定角度（顶点朝前 180° / 顶点朝后 0°）
+    S.yaw = id === 'pose-front' ? 180 : 0;
+    syncSliders(['yaw']);
+    updateButtons();
+  }
+  else if(id === 'toggle-unfold'){ S.unfold = S.unfold > 0.5 ? 0 : 1; updateButtons(); }
+  else if(id === 'toggle-xray'){
+    S.xray = !S.xray;
+    applyFaceBaseline();
+    hiddenDirty = true;
+    if(selFace){ selFace.material.color.setHex(COL.hi); selFace.material.emissive.setHex(COL.hi); selFace.material.emissiveIntensity = 0.35; }
+    updateButtons();
+  }
+  else if(id.startsWith('toggle-ray')){
+    const key = { 'toggle-rayF':'rayF', 'toggle-rayT':'rayT', 'toggle-rayS':'rayS' }[id];
+    S[key] = !S[key];
+    updateButtons();
+  }
+}
+function setBtn(id, on){ const e = document.getElementById('b-'+id); if(e) e.classList.toggle('on', !!on); }
+function updateButtons(){
+  ['prism','cylinder','cone','sphere'].forEach(k=> setBtn('shape-'+k, S.solid===k));
+  const yawN = ((S.yaw % 360) + 360) % 360;
+  setBtn('pose-front', S.solid==='prism' && Math.abs(yawN-180) < 1.5);
+  setBtn('pose-back',  S.solid==='prism' && (yawN < 1.5 || yawN > 358.5));
+  setBtn('toggle-unfold', S.unfold > 0.5);
+  setBtn('toggle-xray', S.xray);
+  setBtn('toggle-rayF', S.rayF);
+  setBtn('toggle-rayT', S.rayT);
+  setBtn('toggle-rayS', S.rayS);
+  Object.keys(VIEW_BTN).forEach(id=>{
+    const [az,el] = VIEW_BTN[id];
+    setBtn(id, Math.abs(S.az-az)<0.5 && Math.abs(S.el-el)<0.5);
+  });
+}
+
+/* 面板贴边显隐拉片（触屏默认收起） */
+document.getElementById('tab-hide').addEventListener('click', ()=> document.body.classList.add('panel-off'));
+document.getElementById('tab-show').addEventListener('click', ()=> document.body.classList.remove('panel-off'));
+if(innerWidth <= 820) document.body.classList.add('panel-off');
+
+/* 标题栏立体图形切换 */
+document.querySelectorAll('#shape-bar .sbtn').forEach(b=>{
+  b.addEventListener('click', ()=> buttonAction('shape-' + b.id.slice('b-shape-'.length)));
+});
+
+/* ============================================================
+ *  11. 交互：单指旋转 / 滚轮与双指缩放 / 点选高亮
+ * ========================================================== */
+const raycaster = new THREE.Raycaster();
+raycaster.params.Line.threshold = 0.3;
+const pointers = new Map();
+let lastX = 0, lastY = 0, tap = null, pinch = null;
+
+canvas.addEventListener('pointerdown', e=>{
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+  if(pointers.size === 1){
+    lastX = e.clientX; lastY = e.clientY;
+    tap = { x:e.clientX, y:e.clientY, t0:performance.now() };
+  } else if(pointers.size === 2){
+    tap = null;
+    const [a,b] = [...pointers.values()];
+    pinch = { d:Math.max(1, Math.hypot(a.x-b.x, a.y-b.y)), zoom:S.zoom };
+  }
+});
+canvas.addEventListener('pointermove', e=>{
+  if(!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+  if(pointers.size === 2 && pinch){
+    const [a,b] = [...pointers.values()];
+    const d = Math.max(1, Math.hypot(a.x-b.x, a.y-b.y));
+    S.zoom = Math.max(0.4, Math.min(2.6, pinch.zoom * d / pinch.d));
+    syncSliders(['zoom']);
+    return;
+  }
+  if(pointers.size !== 1) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  if(tap && Math.hypot(e.clientX-tap.x, e.clientY-tap.y) > 10) tap = null;
+  if(dx === 0 && dy === 0) return;
+  S.az = ((S.az - dx*0.32 + 180) % 360 + 360) % 360 - 180;
+  S.el = Math.max(-80, Math.min(85, S.el + dy*0.28));
+  updateButtons();
+});
+function endPointer(e){
+  const wasTap = tap && pointers.has(e.pointerId) && pointers.size === 1;
+  if(wasTap){
+    const p = pointers.get(e.pointerId);
+    if(Math.hypot(p.x-tap.x, p.y-tap.y) <= 10 && performance.now()-tap.t0 < 500) pickAt(p.x, p.y);
+  }
+  pointers.delete(e.pointerId);
+  if(pointers.size < 2) pinch = null;
+  tap = null;
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  S.zoom = Math.max(0.4, Math.min(2.6, S.zoom * (e.deltaY > 0 ? 0.92 : 1.08)));
+  syncSliders(['zoom']);
+}, { passive:false });
+canvas.addEventListener('contextmenu', e=> e.preventDefault());
+
+function pickAt(clientX, clientY){
+  const r = canvas.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((clientX-r.left)/r.width)*2-1, -((clientY-r.top)/r.height)*2+1);
+  raycaster.setFromCamera(ndc, camera);
+  const fh = raycaster.intersectObjects(D.faces, false);
+  const eh = raycaster.intersectObjects(D.pickLines, false);
+  if(eh.length && (!fh.length || eh[0].distance - fh[0].distance < 0.3)) selectLine(eh[0].object);
+  else if(fh.length) selectFace(fh[0].object);
+  else clearSelection();
+}
+
+/* ============================================================
+ *  12. 主循环
+ * ========================================================== */
+const clock = new THREE.Clock();
+let lastGeoKey = '', lastProjSig = '';
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  for(const k of TWEEN_KEYS){
+    if(S[k] === undefined) continue;
+    A[k] += (S[k] - A[k]) * Math.min(1, dt*9);
+    if(Math.abs(S[k]-A[k]) < 1e-3) A[k] = S[k];
+  }
+  if(S.autoRot){
+    S.az = ((S.az + S.autoSpeed*40*dt + 180) % 360 + 360) % 360 - 180;
+    updateButtons();
+  }
+
+  // 形体 / 几何 / 旋转变化 → 重建
+  const geoKey = `${S.solid}|${A.a.toFixed(2)}|${A.h.toFixed(2)}|${A.r.toFixed(2)}|${A.yaw.toFixed(1)}`;
+  if(geoKey !== lastGeoKey){
+    lastGeoKey = geoKey;
+    rebuildSolid();
+    buildProjections();   // 先算居中偏移，光线端点才能对齐投影
+    buildRays();
+    buildFoldLines();
+    lastProjSig = '';
+  }
+
+  // 投影随几何更新（球的三视图恒为等半径圆，与绕竖轴旋转无关）
+  const sig = D.kind === 'sphere'
+    ? `sphere:${A.r.toFixed(2)}:${S.xray?1:0}`
+    : D.allPoints.map(p=>{ const w=worldPoint(p); return w.x.toFixed(2)+w.y.toFixed(2)+w.z.toFixed(2); }).join('|')
+      + ':' + (S.xray?1:0) + ':' + S.solid;
+  if(sig !== lastProjSig){ lastProjSig = sig; buildProjections(); }
+
+  // 透视虚线随观察方向更新（角度变化约 1.5°）
+  if(S.xray){
+    const key = `${S.az.toFixed(0)}|${S.el.toFixed(0)}|${A.yaw.toFixed(0)}|${S.solid}`;
+    if(hiddenDirty || key !== _hiddenKey){ _hiddenKey = key; hiddenDirty = false; buildHiddenLines(); }
+    xrayHolder.visible = true;
+  } else if(xrayHolder.children.length){ xrayHolder.visible = false; }
+
+  updateUnfold();
+  updateRays(dt);
+  updateCamera();
+  renderPass.camera = camera;
+  composer.render();
+}
+
+/* ============================================================
+ *  13. 启动
+ * ========================================================== */
+function onResize(){
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+  bloom.resolution.set(w, h);
+  updateCamera();
+}
+addEventListener('resize', onResize);
+
+function init(){
+  buildPlanes();
+  rebuildSolid();
+  buildProjections();
+  buildRays();
+  buildFoldLines();
+  buildDirLabels();
+  buildPanel();
+  onResize();
+  animate();
+  setTimeout(()=> document.getElementById('boot').classList.add('hide'), 350);
+  setTimeout(()=> document.getElementById('boot')?.remove(), 1200);
+}
+init();
+</script>
+</body>
 </html>
-
-
